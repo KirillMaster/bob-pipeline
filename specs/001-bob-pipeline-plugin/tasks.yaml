@@ -1,0 +1,724 @@
+feature: "001-bob-pipeline-plugin"
+tasks:
+  # ── Phase 1: Setup ────────────────────────────────────────────────
+  - id: "T001"
+    title: "Create plugin scaffold and manifest"
+    description: "Create the Claude Code plugin skeleton: .claude-plugin/plugin.json manifest and the directory layout from plan.yaml (commands/, agents/, templates/, registry/, scripts/, tests/, docs/)."
+    context: "Everything else lands inside this structure; the manifest is what makes the repo installable as a plugin."
+    story_ref: "US1"
+    requirement_refs: ["FR-020"]
+    depends_on: []
+    parallelizable: false
+    entity_refs: []
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "Create .claude-plugin/plugin.json"
+        detail: "Fields: name 'bob-pipeline', version '0.1.0', description 'Uncle Bob (SwarmForge) development pipeline: 6 role subagents, test gauntlet instead of code review', author, repository https://github.com/KirillMaster/bob-pipeline."
+      - order: 2
+        action: "Create directory layout"
+        detail: "commands/, agents/, templates/, registry/, scripts/, tests/fixtures/, docs/ — each non-empty dir gets its first real file in later tasks; add .gitkeep only where nothing lands in this phase."
+      - order: 3
+        action: "Add repo hygiene files"
+        detail: ".gitignore (Python caches, .worktrees/, .bob/), LICENSE (MIT), root README.md stub pointing to docs/."
+    technical_notes:
+      - path: ".claude-plugin/plugin.json"
+        note: "Manifest format per Claude Code plugin docs; commands and agents are discovered from commands/ and agents/ automatically."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "plugin.json parses as JSON and declares name bob-pipeline."
+        done: false
+      - id: "AC-2"
+        description: "All directories from plan.yaml project_structure exist in the repo."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a clone of the repository"]
+        when: "the plugin is installed into Claude Code from the repo"
+        then: ["installation succeeds and the plugin is listed as bob-pipeline"]
+        verification: ["automated"]
+        level: "integration"
+
+  - id: "T002"
+    title: "Author the quality tool registry"
+    description: "Write registry/tool-registry.yaml with entries (stack, category, tool, run_command, report_parser, enabled) for csharp, typescript, python, java plus language-agnostic complexity/duplication tools."
+    context: "The registry is how the pipeline stays stack-agnostic: tools are looked up, never hardcoded (P6)."
+    story_ref: "US1"
+    requirement_refs: ["FR-002"]
+    depends_on: ["T001"]
+    parallelizable: true
+    entity_refs: ["tool-registry-entry"]
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "Define the registry YAML shape"
+        detail: "Top-level list of entries matching the ToolRegistryEntry entity: stack, category (mutation|coverage|complexity|duplication), tool, run_command, report_parser, enabled."
+      - order: 2
+        action: "Fill per-stack mutation/coverage entries"
+        detail: "csharp: Stryker.NET (dotnet stryker) + coverlet; typescript: StrykerJS (npx stryker run) + runner coverage; python: mutmut (mutmut run) + coverage.py; java: PIT (mvn org.pitest:pitest-maven:mutationCoverage) + JaCoCo."
+      - order: 3
+        action: "Fill language-agnostic entries"
+        detail: "stack 'any': lizard for complexity (lizard --csv), jscpd for duplication (npx jscpd --reporters json); report_parser points to scripts/parse_reports.py handlers."
+    technical_notes:
+      - path: "registry/tool-registry.yaml"
+        note: "One entry per (stack, category); 'any' entries are the fallback when no stack-specific entry exists."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "Registry contains mutation+coverage entries for csharp, typescript, python, java and 'any' entries for complexity and duplication."
+        done: false
+      - id: "AC-2"
+        description: "Every entry names an existing report_parser handler in scripts/."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["the registry file"]
+        when: "scripts/validate_config.py --registry registry/tool-registry.yaml runs"
+        then: ["validation exits 0", "all four stacks resolve a full category set (with 'any' fallbacks)"]
+        verification: ["automated"]
+        level: "unit"
+
+  - id: "T003"
+    title: "Author the pipeline config template"
+    description: "Write templates/bob-pipeline.yaml — the config template /bob-init instantiates — with Bob-flow defaults for roles, models, human gates, thresholds, limits, and modes."
+    context: "Every behavior parameter must come from config, and the defaults must reproduce Bob's flow (P5); this file is the single source of those defaults."
+    story_ref: "US1"
+    requirement_refs: ["FR-001", "FR-011"]
+    depends_on: ["T001"]
+    parallelizable: true
+    entity_refs: ["pipeline-config", "role"]
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "Write the template with placeholders"
+        detail: "Placeholders {{STACK}}, {{PROJECT_NAME}}, {{TOOLS}} filled by /bob-init; static defaults inline."
+      - order: 2
+        action: "Encode Bob-flow defaults"
+        detail: "roles: all six enabled, models sonnet/sonnet/sonnet/sonnet/haiku/haiku; human_gates: gherkin_approval true, final_qa_report true; thresholds: mutation_score_min 80, coverage informational, complexity/duplication not-worse-than-baseline; return_limit 3; parallel_limit 3; night_mode_default false; send-back routes qa->coder, architect->cleaner+coder; specifier and coder marked non-skippable."
+      - order: 3
+        action: "Write the config JSON Schema"
+        detail: "schemas/bob-pipeline.schema.json inside the plugin (used by scripts/validate_config.py); mirrors the PipelineConfig entity."
+    technical_notes:
+      - path: "templates/bob-pipeline.yaml"
+        note: "Instantiated to .claude/bob-pipeline.yaml in the target project by /bob-init."
+      - path: "schemas/bob-pipeline.schema.json"
+        note: "Validation source of truth for /bob-config changes too."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "Template with placeholders substituted validates against the config schema."
+        done: false
+      - id: "AC-2"
+        description: "Defaults match the spec: full pipeline, both human gates, mutation 80, limits 3/3, per-role sonnet/haiku split."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["the template instantiated with stack csharp"]
+        when: "scripts/validate_config.py runs on the result"
+        then: ["exit 0"]
+        verification: ["automated"]
+        level: "unit"
+
+  - id: "T004"
+    title: "Implement config validation and report-parsing scripts"
+    description: "Write scripts/validate_config.py (config + registry validation) and scripts/parse_reports.py (extract metrics from Stryker/mutmut/PIT/lizard/jscpd/coverage outputs), with pytest coverage."
+    context: "Gates must be computed from tool output by scripts, not by model judgment (P1); these parsers are that mechanical layer."
+    story_ref: "US6"
+    requirement_refs: ["FR-015"]
+    depends_on: ["T002", "T003"]
+    parallelizable: false
+    entity_refs: ["tool-registry-entry", "gate-result"]
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "Implement scripts/validate_config.py"
+        detail: "Validates a bob-pipeline.yaml against schemas/bob-pipeline.schema.json and cross-checks tools against registry entries; exits non-zero with JSON violations on stderr."
+      - order: 2
+        action: "Implement scripts/parse_reports.py"
+        detail: "One handler per tool: stryker (mutation-report.json mutationScore), mutmut (results summary), pit (mutations.xml), lizard (CSV avg/max CCN), jscpd (json percentage), coverage (cobertura/lcov line rate). Output: normalized JSON {category, metric_value}."
+      - order: 3
+        action: "Implement scripts/compute_gates.py"
+        detail: "Takes normalized metrics + thresholds/baselines from config, emits GateResult JSON list ({gate, role, metric_value, threshold, baseline, passed, diagnosis}); coverage never sets passed=false."
+      - order: 4
+        action: "Write pytest suite"
+        detail: "tests/test_scripts/ with fixture report files per tool; cover threshold pass/fail, baseline comparison, coverage-informational, malformed report error paths."
+    technical_notes:
+      - path: "scripts/parse_reports.py"
+        note: "Handlers referenced by name from registry report_parser fields (T002 AC-2)."
+      - path: "scripts/compute_gates.py"
+        note: "The only place gate verdicts are computed; commands must call it, never eyeball reports."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "pytest passes for all parser and gate-computation cases."
+        done: false
+      - id: "AC-2"
+        description: "compute_gates.py marks coverage informational (never blocking) and mutation < threshold as failed with a diagnosis."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a Stryker mutation-report.json fixture with score 72"]
+        when: "compute_gates.py runs with mutation_score_min 80"
+        then: ["gate mutation-score has passed=false and a diagnosis naming the shortfall"]
+        verification: ["automated"]
+        level: "unit"
+      - id: "TS-2"
+        given: ["a lizard CSV fixture equal to the stored baseline"]
+        when: "compute_gates.py runs with not-worse-than-baseline policy"
+        then: ["gate complexity-baseline has passed=true"]
+        verification: ["automated"]
+        level: "unit"
+
+  # ── Phase 2: Foundational ─────────────────────────────────────────
+  - id: "T005"
+    title: "Author the six role agent templates"
+    description: "Write agents/specifier.md, coder.md, cleaner.md, architect.md, hardener.md, qa.md — role prompts with {{PROJECT_NAME}}/{{DOMAIN}}/{{TECH_STACK}}/{{TOOLS}} placeholders, each ending with the mandatory role commit."
+    context: "The roles are the pipeline; each must carry Bob's discipline for its stage and the clean-context/commit contract (P3)."
+    story_ref: "US2"
+    requirement_refs: ["FR-004", "FR-006", "FR-013"]
+    depends_on: ["T001"]
+    parallelizable: true
+    entity_refs: ["role", "gherkin-spec", "gate-result"]
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "Write specifier.md"
+        detail: "Input: feature description or yamlkit artifacts. Output: .bob/features/*.feature (Gherkin scenarios with stable ids), QA procedures per scenario, slice breakdown with depends_on graph. Never writes implementation code."
+      - order: 2
+        action: "Write coder.md"
+        detail: "TDD against approved Gherkin: failing acceptance test traced to scenario id first, then implementation; runs the project test suite; commit 'bob(coder): <slice> — <gist>'."
+      - order: 3
+        action: "Write cleaner.md"
+        detail: "Behavior-preserving refactoring only; runs tests after every change; runs complexity/duplication tools via registry commands and improves toward baseline; commit 'bob(cleaner): ...'."
+      - order: 4
+        action: "Write architect.md"
+        detail: "Checks module boundaries and dependency direction; semantic findings produce a send-back verdict (to cleaner/coder per config routes), mechanical fixes done in place; commit 'bob(architect): ...'."
+      - order: 5
+        action: "Write hardener.md"
+        detail: "Runs mutation tool from config; kills surviving mutants by adding tests (in-place repair, FR-013); if mutation category disabled — documented heuristic degradation (boundary values, error paths); commit 'bob(hardener): ...'."
+      - order: 6
+        action: "Write qa.md"
+        detail: "Executes QA procedures per approved scenario, captures outputs, computes gherkin-traceability gate via scripts, assembles the RunReport section; semantic failure → send-back verdict to coder; commit 'bob(qa): ...'."
+      - order: 7
+        action: "Add the shared role contract block to every template"
+        detail: "Common footer: work only inside the run worktree; finish with the labeled commit; return a compact structured summary (status, gate results JSON, send-back verdict if any); never ask the user questions."
+    technical_notes:
+      - path: "agents/"
+        note: "Placeholder style follows the model-tiered-team-kit reference; model is NOT set in frontmatter (bug #44385) — /bob-run passes it explicitly."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "Six templates exist; each contains the placeholders, the commit instruction with the role label, and a no-user-questions rule."
+        done: false
+      - id: "AC-2"
+        description: "Checking roles (cleaner/architect/hardener/qa) each define in-place repair scope vs send-back conditions matching FR-013."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["templates instantiated for a fixture project"]
+        when: "a slice runs through the full pipeline"
+        then: ["git log of the run branch shows exactly one commit per enabled role, labeled bob(<role>)"]
+        verification: ["automated"]
+        level: "e2e"
+
+  - id: "T006"
+    title: "Author shared templates: Gherkin, reports, merge protocol"
+    description: "Write templates/gherkin.feature (scenario skeleton with stable ids), templates/run-report.md, templates/state.yaml, and templates/worktree-merge.md (the merge protocol roles and /bob-run follow)."
+    context: "Uniform artifacts make runs auditable and the merge deterministic; the merge protocol is the single exit point for changes (P4)."
+    story_ref: "US2"
+    requirement_refs: ["FR-007", "FR-016"]
+    depends_on: ["T001"]
+    parallelizable: true
+    entity_refs: ["gherkin-spec", "run-report", "run-state"]
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "Write templates/gherkin.feature"
+        detail: "Feature header + scenario blocks tagged @<scenario-id>; companion note on test traceability conventions per stack ([Trait], describe('@id'), pytest marker)."
+      - order: 2
+        action: "Write templates/run-report.md"
+        detail: "Sections mirroring RunReport: summary, per-slice results with gates, deviations (skips/degradations/auto-approvals/exhausted limits), commit links, merged flag."
+      - order: 3
+        action: "Write templates/state.yaml"
+        detail: "RunState shape: run_id, feature, mode, current_slice, current_role, input_checksums, baselines, slices[]."
+      - order: 4
+        action: "Write templates/worktree-merge.md"
+        detail: "Adapted from model-tiered-team-kit: preconditions (all gates passed), no squash, merge order for dependent slices, conflict handling (flag slice, continue others), worktree cleanup."
+    technical_notes:
+      - path: "templates/"
+        note: "Commands copy these into the target project's .bob/ at run time; they are data, not prompts."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "All four templates exist and state.yaml matches the RunState entity field-for-field."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a completed fixture run"]
+        when: "the generated report is compared to templates/run-report.md sections"
+        then: ["every section is present and populated"]
+        verification: ["automated"]
+        level: "integration"
+
+  # ── Phase 3: US1 — /bob-init ──────────────────────────────────────
+  - id: "T007"
+    title: "Implement /bob-init command"
+    description: "Write commands/bob-init.md: stack detection from project markers, interview with Bob-flow defaults, tool selection from the registry, fallback web research for unknown stacks, config creation, and edge-case outcomes."
+    context: "Init freezes all pipeline decisions into the project config so later runs are deterministic and offline."
+    story_ref: "US1"
+    requirement_refs: ["FR-001", "FR-002", "FR-003", "FR-004", "FR-020"]
+    depends_on: ["T002", "T003", "T004"]
+    parallelizable: false
+    entity_refs: ["pipeline-config", "tool-registry-entry", "role"]
+    contract_refs: ["cmd-bob-init"]
+    steps:
+      - order: 1
+        action: "Implement precondition checks"
+        detail: "Existing .claude/bob-pipeline.yaml → outcome already-initialized (suggest /bob-config); no .git → outcome not-a-git-repo (suggest git init); missing test runner → warning recorded for warnings[]."
+      - order: 2
+        action: "Implement stack detection"
+        detail: "Scan markers: *.csproj/*.sln → csharp; package.json (+tsconfig) → typescript; pyproject.toml/setup.py → python; pom.xml/build.gradle → java; honor stack_override; ambiguous/multiple → ask (day mode only)."
+      - order: 3
+        action: "Implement tool selection"
+        detail: "Resolve each category from registry (stack-specific first, 'any' fallback); category unresolved → registry research path: WebSearch for candidates, present to user, on confirmation freeze into config, on none → enabled:false + warning (outcome unknown-stack-research when the whole stack is unknown)."
+      - order: 4
+        action: "Implement the interview"
+        detail: "One question at a time: confirm roles/models/gates/thresholds/limits/BDD option, defaults preselected from the template; write answers into the instantiated config."
+      - order: 5
+        action: "Instantiate config and role agents"
+        detail: "Fill templates/bob-pipeline.yaml placeholders, write .claude/bob-pipeline.yaml, validate via scripts/validate_config.py; instantiate agents/*.md placeholders with project name/domain/stack into the project's .claude/agents/bob/ directory."
+      - order: 6
+        action: "Emit the initialized outcome"
+        detail: "Report config_path, stack, tools_selected, warnings per the cmd-bob-init contract."
+    technical_notes:
+      - path: "commands/bob-init.md"
+        note: "Command prompt; heavy lifting (validation) delegated to scripts via Bash calls."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "On a C# fixture, /bob-init produces a valid config with Stryker.NET/coverlet/lizard/jscpd frozen and defaults matching Bob's flow."
+        done: false
+      - id: "AC-2"
+        description: "Re-running yields already-initialized without overwriting; non-git dir yields not-a-git-repo."
+        done: false
+      - id: "AC-3"
+        description: "A stack with no registry mutation tool ends with that category enabled:false and a warning."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["fixture tests/fixtures/csharp-calculator, no existing config"]
+        when: "/bob-init runs accepting defaults"
+        then: [".claude/bob-pipeline.yaml validates (exit 0)", "tools frozen from registry", "warnings empty"]
+        verification: ["automated"]
+        level: "e2e"
+      - id: "TS-2"
+        given: ["a directory without .git"]
+        when: "/bob-init runs"
+        then: ["outcome not-a-git-repo, no config written"]
+        verification: ["automated"]
+        level: "integration"
+
+  # ── Phase 4: US2 — /bob-run core ──────────────────────────────────
+  - id: "T008"
+    title: "Implement /bob-run core orchestration (standalone, day mode)"
+    description: "Write commands/bob-run.md: preconditions, Specifier phase, human approval gate, worktree creation, sequential role execution with explicit models and role commits, gate checks between handoffs, merge, and report."
+    context: "This is the pipeline itself — the whole feature exists to make this run happen the way Bob runs SwarmForge."
+    story_ref: "US2"
+    requirement_refs: ["FR-005", "FR-006", "FR-007", "FR-008", "FR-011", "FR-016"]
+    depends_on: ["T005", "T006", "T007"]
+    parallelizable: false
+    entity_refs: ["pipeline-config", "slice", "gherkin-spec", "gate-result", "run-report"]
+    contract_refs: ["cmd-bob-run"]
+    steps:
+      - order: 1
+        action: "Implement preconditions"
+        detail: "No config → not-initialized; dirty working copy → dirty-working-copy (EC-3); no test infra → no-test-infra with offer to let Coder set it up (EC-1); existing .bob/state.yaml + worktree → interrupted-run-found (handled fully in T009)."
+      - order: 2
+        action: "Implement the Specifier phase"
+        detail: "Spawn specifier subagent (model from config, passed explicitly) with the feature description; receive Gherkin + QA procedures + slice breakdown; compute input checksums."
+      - order: 3
+        action: "Implement the approval gate"
+        detail: "Present features/QA/slices → outcome awaiting-approval; on approval record checksums and approval status; on rejection with feedback re-run Specifier (counts against return_limit); on final rejection → outcome rejected, clean up."
+      - order: 4
+        action: "Implement worktree setup"
+        detail: "git worktree add .worktrees/bob-<feature>-<slice> -b bob/<feature>/<slice> from the current branch head; copy .bob/ skeleton (features, state.yaml from template, baselines: capture via tools if first run — EC-7)."
+      - order: 5
+        action: "Implement the role loop"
+        detail: "For each enabled, non-skipped role in config order: spawn subagent with explicit model, worktree cwd, instantiated role prompt + slice context; on return verify the labeled commit exists (create-check, not trust); run compute_gates.py for the role's gates; route failures per config (in-place already done by role; semantic → send-back respecting return_limit, T012 details)."
+      - order: 6
+        action: "Implement merge and report"
+        detail: "All slices passed → merge per templates/worktree-merge.md into the user's branch, remove worktree; assemble RunReport from templates/run-report.md with gate results, commit links, deviations; outcomes completed / completed-with-failures."
+    technical_notes:
+      - path: "commands/bob-run.md"
+        note: "Orchestrator prompt; spawns agents via the Agent tool with model parameter from config (never frontmatter)."
+      - path: "scripts/compute_gates.py"
+        note: "Called between handoffs; verdicts come only from here (P1)."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "On a fixture, a run produces per-role labeled commits, gates computed from tool output, a merge, and a full report; the user's working copy is untouched until merge."
+        done: false
+      - id: "AC-2"
+        description: "No implementation code exists before approval; rejection stops the run with no worktree left behind."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["initialized csharp fixture", "feature description 'add percent operation'"]
+        when: "/bob-run executes and the user approves"
+        then: ["run branch has bob(specifier|coder|cleaner|architect|hardener|qa) commits", "report lists every Gherkin scenario status", "working copy clean during the run"]
+        verification: ["automated"]
+        level: "e2e"
+      - id: "TS-2"
+        given: ["the approval prompt is answered with rejection"]
+        when: "/bob-run continues"
+        then: ["outcome rejected", "no implementation commits exist"]
+        verification: ["automated"]
+        level: "e2e"
+
+  - id: "T009"
+    title: "Implement run state persistence and resume"
+    description: "Persist RunState to .bob/state.yaml at every role boundary; detect interrupted runs and offer resume from the last role commit or discard; detect stale approvals via checksums."
+    context: "An overnight or long run must survive interruption without losing paid-for work (EC-5) and must not silently run against edited inputs (EC-9)."
+    story_ref: "US2"
+    requirement_refs: ["FR-019"]
+    depends_on: ["T008"]
+    parallelizable: false
+    entity_refs: ["run-state", "slice"]
+    contract_refs: ["cmd-bob-run"]
+    steps:
+      - order: 1
+        action: "Write state at boundaries"
+        detail: "Update .bob/state.yaml before spawning each role and after each gate: current_slice, current_role, return counts, slice statuses."
+      - order: 2
+        action: "Implement detection and resume"
+        detail: "On /bob-run start, existing state + worktree → outcome interrupted-run-found with position; resume: recompute input checksums, match → continue from the role after the last verified commit; discard: remove worktree and branch."
+      - order: 3
+        action: "Implement stale-approval handling"
+        detail: "Checksum mismatch on resume (or mid-run artifact edit detected at role boundary) → outcome stale-approval listing changed artifacts; require re-approval before continuing."
+    technical_notes:
+      - path: "templates/state.yaml"
+        note: "Shape defined in T006; keep in worktree so parallel runs don't collide."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "Killing a run after the coder commit and re-invoking /bob-run offers resume; resuming does not repeat the coder role."
+        done: false
+      - id: "AC-2"
+        description: "Editing the approved .feature file before resume yields stale-approval."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a run interrupted after bob(coder) commit"]
+        when: "/bob-run is invoked again and resume is chosen"
+        then: ["execution continues at cleaner", "final report notes the resume"]
+        verification: ["automated"]
+        level: "e2e"
+
+  # ── Phase 5: US3 — yamlkit integration ───────────────────────────
+  - id: "T010"
+    title: "Implement yamlkit artifact auto-detection mode"
+    description: "Extend /bob-run: when spec/tasks artifacts exist for the current feature, derive Gherkin from the spec and slices from tasks instead of a free-text description; keep the approval gate."
+    context: "Teams already using spec-driven flows should plug the pipeline in without re-describing features."
+    story_ref: "US3"
+    requirement_refs: ["FR-009"]
+    depends_on: ["T008"]
+    parallelizable: true
+    entity_refs: ["slice", "gherkin-spec"]
+    contract_refs: ["cmd-bob-run"]
+    steps:
+      - order: 1
+        action: "Implement detection"
+        detail: "Look for .specify/feature.json → feature dir, else newest specs/*/ containing spec.(yaml|md); found + no description argument → integration mode; nothing found + no description → error asking for one."
+      - order: 2
+        action: "Adapt the Specifier input"
+        detail: "Integration mode: Specifier receives spec content (user stories, acceptance criteria) and tasks list; generates Gherkin traced to story ids and maps slices 1:1 to task groups with their depends_on."
+      - order: 3
+        action: "Keep gates identical"
+        detail: "Approval, checksums (over spec/tasks sources too), role loop, and report are unchanged; report names the source artifacts."
+    technical_notes:
+      - path: "commands/bob-run.md"
+        note: "Mode selection happens before the Specifier phase; both modes converge on the same slice/Gherkin structures."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "In a project with yamlkit artifacts, /bob-run without arguments enters integration mode and traces Gherkin to spec story ids."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a fixture with specs/001-x/spec.yaml and tasks.yaml"]
+        when: "/bob-run runs with no description"
+        then: ["slices mirror tasks with dependencies", "approval gate still shown"]
+        verification: ["automated"]
+        level: "e2e"
+
+  # ── Phase 6: US4 — per-feature skip ───────────────────────────────
+  - id: "T011"
+    title: "Implement per-feature role skip and overrides"
+    description: "Accept an explicit skip list and parameter overrides at run start ('skip Hardener'); refuse to skip Specifier/Coder; record every deviation in the report."
+    context: "Small features shouldn't pay for the full gauntlet, but skips must stay visible, never silent (P7)."
+    story_ref: "US4"
+    requirement_refs: ["FR-010"]
+    depends_on: ["T008"]
+    parallelizable: true
+    entity_refs: ["slice", "run-report"]
+    contract_refs: ["cmd-bob-run"]
+    steps:
+      - order: 1
+        action: "Parse skip/override arguments"
+        detail: "Natural-language and structured forms ('skip hardener', skip_roles: [hardener]); normalize to role names; unknown role → invalid argument error before any work."
+      - order: 2
+        action: "Enforce non-skippable roles"
+        detail: "specifier/coder in the skip list → refuse with explanation, run does not start."
+      - order: 3
+        action: "Apply and record"
+        detail: "Skipped roles excluded from the role loop (zero subagent spawns); slices carry skipped_roles; report deviations list every skip and override with origin 'per-feature'."
+    technical_notes:
+      - path: "commands/bob-run.md"
+        note: "Overrides apply to this run only; the base config file is never modified by a run."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "A run with 'skip Hardener' has no bob(hardener) commit and lists the skip under deviations."
+        done: false
+      - id: "AC-2"
+        description: "'skip Coder' is refused before the worktree is created."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["an initialized fixture"]
+        when: "/bob-run '...' skipping Hardener completes"
+        then: ["no hardener commit", "deviations contains the skip"]
+        verification: ["automated"]
+        level: "e2e"
+
+  # ── Phase 7: US5 — night mode ─────────────────────────────────────
+  - id: "T012"
+    title: "Implement night mode"
+    description: "Add --night: auto-approve Gherkin with a report flag, forbid interactive questions, mark-and-skip slices that exhaust limits, and produce the consolidated morning report."
+    context: "The autonomy payoff of Bob's flow is the overnight run; it must never stall on a question and never hide a failure (P7)."
+    story_ref: "US5"
+    requirement_refs: ["FR-012", "FR-005", "FR-014", "FR-016"]
+    depends_on: ["T008", "T009"]
+    parallelizable: false
+    entity_refs: ["run-state", "run-report", "gherkin-spec"]
+    contract_refs: ["cmd-bob-run"]
+    steps:
+      - order: 1
+        action: "Implement mode switching"
+        detail: "--night flag or night_mode config; mode recorded in RunState; day-mode-only branches (interview questions, approval prompt, resume prompt) each get a defined night behavior."
+      - order: 2
+        action: "Implement auto-approval"
+        detail: "Gherkin approval set to auto-approved-night with checksums recorded; report deviations list every auto-approval."
+      - order: 3
+        action: "Implement failure policy"
+        detail: "Slice exhausting return_limit or hitting an unanswerable question → status failed with diagnosis, pipeline continues with remaining slices; merge only passing slices."
+      - order: 4
+        action: "Produce the morning report"
+        detail: "Single consolidated RunReport across all slices: auto-approvals, failures with diagnoses, merges performed; written to .bob/reports/ and surfaced on session return."
+    technical_notes:
+      - path: "commands/bob-run.md"
+        note: "Audit rule: grep the night path for any AskUserQuestion/approval prompt — there must be none (P7 gate)."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "A night run over a feature with one deliberately failing slice completes, merges the passing slices, and reports the failure with a diagnosis — zero questions asked."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["initialized fixture", "--night flag", "one slice engineered to fail its gates"]
+        when: "the run completes unattended"
+        then: ["no interactive prompt occurred", "failed slice marked and skipped", "morning report lists auto-approval and the failure"]
+        verification: ["automated"]
+        level: "e2e"
+
+  # ── Phase 8: US6 — gauntlet, repairs, send-backs ─────────────────
+  - id: "T013"
+    title: "Implement gate enforcement, in-place repair, and send-back routing"
+    description: "Wire compute_gates.py verdicts into the role loop: threshold/baseline gates block handoff, checking roles repair in place, semantic failures route back per config with the iteration limit."
+    context: "This is the gauntlet: quality enforced by tool-derived verdicts and bounded repair loops instead of human review (P1, P7)."
+    story_ref: "US6"
+    requirement_refs: ["FR-013", "FR-014", "FR-015"]
+    depends_on: ["T008"]
+    parallelizable: false
+    entity_refs: ["gate-result", "slice", "run-state"]
+    contract_refs: ["cmd-bob-run"]
+    steps:
+      - order: 1
+        action: "Enforce gates at handoff"
+        detail: "After each role commit run its configured gates via compute_gates.py; failed mechanical gate → same role repairs in place and re-runs the gate (bounded by return_limit iterations of its inner loop)."
+      - order: 2
+        action: "Implement send-back routing"
+        detail: "Semantic failure verdicts from roles (qa-fail, architect-fail) → route per config (default qa→coder, architect→cleaner/coder); increment slice return_count; target role reruns from its stage with the failure diagnosis as input."
+      - order: 3
+        action: "Enforce the limit"
+        detail: "return_count > return_limit → day mode: stop slice with diagnosis and ask the user; night mode: mark failed, continue (per T012); all send-backs and repairs logged into gate_results diagnoses."
+      - order: 4
+        action: "Implement baseline management"
+        detail: "First run captures complexity/duplication baselines into .bob/baselines/ (EC-7); subsequent gates compare not-worse-than; baselines updated on successful merge."
+    technical_notes:
+      - path: "scripts/compute_gates.py"
+        note: "Extended here if send-back verdict schema needs fields; verdict JSON is part of every checking role's return contract (T005 step 7)."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "A surviving-mutant fixture drives Hardener to add tests until mutation ≥ threshold without any send-back."
+        done: false
+      - id: "AC-2"
+        description: "A QA semantic failure sends the slice back to Coder at most return_limit times, then stops with a diagnosis."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["fixture code with a known surviving mutant"]
+        when: "the hardener stage runs"
+        then: ["new test kills the mutant", "mutation gate passes", "return_count unchanged"]
+        verification: ["automated"]
+        level: "e2e"
+      - id: "TS-2"
+        given: ["QA procedure engineered to fail semantically 4 times"]
+        when: "the slice runs with return_limit 3"
+        then: ["slice stops failed after 3 send-backs with the diagnosis chain in the report"]
+        verification: ["automated"]
+        level: "e2e"
+
+  # ── Phase 9: US7 — parallel slices ────────────────────────────────
+  - id: "T014"
+    title: "Implement parallel execution of independent slices"
+    description: "Run independent slices as concurrent worktree pipelines up to parallel_limit; dependent slices wait for predecessors' merges; merge conflicts flag the slice without derailing others."
+    context: "Data parallelism over slices is our substitute for Bob's pipeline overlap — it recovers throughput on multi-slice features."
+    story_ref: "US7"
+    requirement_refs: ["FR-017", "FR-007"]
+    depends_on: ["T013", "T009"]
+    parallelizable: false
+    entity_refs: ["slice", "run-state", "run-report"]
+    contract_refs: ["cmd-bob-run"]
+    steps:
+      - order: 1
+        action: "Build the dependency schedule"
+        detail: "Topologically order slices by depends_on; ready set = slices whose predecessors are merged; spawn up to parallel_limit concurrent slice pipelines, each in its own worktree .worktrees/bob-<feature>-<slice> with its own state.yaml."
+      - order: 2
+        action: "Serialize merges"
+        detail: "Merges into the feature branch happen one at a time in completion order per the merge protocol; after each merge, re-evaluate the ready set; dependent slices branch from the post-merge head."
+      - order: 3
+        action: "Handle conflicts"
+        detail: "Unresolvable merge conflict → slice flagged failed-merge with diagnosis, worktree preserved for inspection, remaining slices continue."
+    technical_notes:
+      - path: "commands/bob-run.md"
+        note: "Slice pipelines are spawned as parallel subagent chains; the orchestrator owns all merges — roles never merge."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "Two independent slices run concurrently in separate worktrees; a third dependent slice starts only after its predecessor merges."
+        done: false
+      - id: "AC-2"
+        description: "An injected merge conflict flags only that slice; the others complete and merge."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a feature with slices S1, S2 independent and S3 depends_on S1"]
+        when: "/bob-run executes with parallel_limit 2"
+        then: ["S1 and S2 overlap in time", "S3 starts after S1 merges", "wall time ≈ longest chain, not the sum"]
+        verification: ["automated"]
+        level: "e2e"
+
+  # ── Phase 10: US8 — /bob-config ───────────────────────────────────
+  - id: "T015"
+    title: "Implement /bob-config command"
+    description: "Write commands/bob-config.md: show the current config in readable form; discuss and apply changes (models, thresholds, tools, routes, limits, BDD option) with validation; reject invalid changes with reasons."
+    context: "The frozen init decisions must stay revisable through a safe, validated channel instead of hand-editing YAML."
+    story_ref: "US8"
+    requirement_refs: ["FR-018"]
+    depends_on: ["T007"]
+    parallelizable: true
+    entity_refs: ["pipeline-config", "role", "tool-registry-entry"]
+    contract_refs: ["cmd-bob-config"]
+    steps:
+      - order: 1
+        action: "Implement show mode"
+        detail: "No change request → render config as grouped tables (roles/models, gates/thresholds, tools per category, limits, modes); missing config → not-initialized."
+      - order: 2
+        action: "Implement change application"
+        detail: "Parse requested changes; tool changes outside the registry require the research-and-confirm path from /bob-init; apply to a copy, run scripts/validate_config.py, on success overwrite and output the old→new diff."
+      - order: 3
+        action: "Implement rejection"
+        detail: "Validation failures → outcome invalid-change listing each violation (unknown role, threshold out of range, tool without parser); config untouched."
+    technical_notes:
+      - path: "commands/bob-config.md"
+        note: "Reuses validate_config.py and the registry-research flow from bob-init — no duplicated validation logic."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "Changing hardener's model and the mutation threshold produces a valid updated config and a two-line diff."
+        done: false
+      - id: "AC-2"
+        description: "Setting mutation threshold to 150 is rejected with an explanation; the file is unchanged."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["an initialized fixture"]
+        when: "/bob-config applies 'hardener model sonnet, mutation 85'"
+        then: ["config validates", "diff shows both changes"]
+        verification: ["automated"]
+        level: "integration"
+
+  # ── Phase 11: Polish ──────────────────────────────────────────────
+  - id: "T016"
+    title: "Build fixture mini-projects"
+    description: "Create tests/fixtures/csharp-calculator, ts-todo, and python-stats: minimal git projects with test runners, seeded defects (a surviving mutant, a duplication hotspot) for gate testing."
+    context: "Every e2e scenario in quickstart needs a small real project where tool output is predictable."
+    story_ref: "US2"
+    requirement_refs: ["FR-002", "FR-015"]
+    depends_on: ["T001"]
+    parallelizable: true
+    entity_refs: ["tool-registry-entry"]
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "Create csharp-calculator"
+        detail: "xUnit + coverlet configured; Calculator class with a branch not killed by existing tests (surviving mutant seed)."
+      - order: 2
+        action: "Create ts-todo"
+        detail: "vitest configured; a deliberately duplicated helper for the jscpd gate."
+      - order: 3
+        action: "Create python-stats"
+        detail: "pytest configured; mutmut-compatible layout; one over-complex function for the lizard baseline test."
+      - order: 4
+        action: "Script fixture reset"
+        detail: "tests/fixtures/reset.py re-initializes each fixture's git state so e2e runs are repeatable."
+    technical_notes:
+      - path: "tests/fixtures/"
+        note: "Each fixture is its own git repo (init on reset), not a submodule of the plugin repo."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "Each fixture's native test suite passes; seeded defects are detected by the corresponding registry tool."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a reset csharp fixture"]
+        when: "Stryker.NET runs"
+        then: ["at least one surviving mutant is reported"]
+        verification: ["automated"]
+        level: "integration"
+
+  - id: "T017"
+    title: "Run e2e validation per quickstart and write user docs"
+    description: "Execute all eight quickstart scenarios against the fixtures, fix findings, and write docs/README.md (installation from the marketplace repo, first run, config reference, troubleshooting)."
+    context: "The plugin ships to colleagues; the quickstart scenarios are the acceptance gauntlet for the plugin itself, and the README is what colleagues actually read."
+    story_ref: "US2"
+    requirement_refs: ["FR-020", "FR-016"]
+    depends_on: ["T007", "T008", "T009", "T010", "T011", "T012", "T013", "T014", "T015", "T016"]
+    parallelizable: false
+    entity_refs: ["run-report"]
+    contract_refs: ["cmd-bob-init", "cmd-bob-run", "cmd-bob-config"]
+    steps:
+      - order: 1
+        action: "Execute quickstart scenarios 1–8"
+        detail: "Follow specs/001-bob-pipeline-plugin/quickstart.md exactly on the fixtures; record outcome per scenario; fix defects and re-run until all pass."
+      - order: 2
+        action: "Write docs/README.md"
+        detail: "Sections: what this is (Bob's flow, 30-second pitch), install (plugin marketplace add from the GitHub repo), /bob-init walkthrough, daily usage (/bob-run, skips, night mode), config reference table, troubleshooting (EC outcomes and what to do)."
+      - order: 3
+        action: "Final repo pass"
+        detail: "Root README links to docs; plugin.json version bumped to 1.0.0; all English-language check on shipped files."
+    technical_notes:
+      - path: "docs/README.md"
+        note: "Written for a colleague who has never seen SwarmForge; no internal jargon."
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "All eight quickstart scenarios pass on the fixtures."
+        done: false
+      - id: "AC-2"
+        description: "A fresh install following only docs/README.md reaches a successful first run."
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["a machine with Claude Code and none of this plugin"]
+        when: "docs/README.md installation and first-run steps are followed"
+        then: ["/bob-init and a first /bob-run succeed on a fixture"]
+        verification: ["automated"]
+        level: "e2e"
