@@ -1,0 +1,28 @@
+# RunState — .bob/state.yaml inside the run worktree. Updated by the orchestrator
+# at every role boundary; used to detect and resume interrupted runs (EC-5).
+run_id: "{{FEATURE}}-{{STAMP}}"
+feature: "{{FEATURE}}"
+mode: day            # day | night
+current_slice: null  # slice id currently executing (null between slices)
+current_role: null   # role currently executing within current_slice
+
+# Checksums (sha256) of input artifacts at approval time. A mismatch on resume
+# or at a role boundary means stale approval → re-approval required (EC-9).
+input_checksums: {}
+#  ".bob/features/<name>.feature": "<sha256>"
+#  "specs/<feature>/spec.yaml": "<sha256>"   # integration mode only
+
+# Metric baselines captured at run start (first run captures, EC-7).
+baselines: {}
+#  complexity: 11     # max CCN
+#  duplication: 3.2   # duplicated lines %
+
+slices: []
+#  - id: S1
+#    title: "..."
+#    depends_on: []
+#    scenario_refs: [S1-AS1, S1-AS2]
+#    status: pending          # pending | running | passed | failed | merged | skipped
+#    return_count: 0
+#    worktree_path: ".worktrees/bob-<feature>-S1"
+#    skipped_roles: []
