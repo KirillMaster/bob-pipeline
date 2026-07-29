@@ -29,7 +29,7 @@ def load_json_arg(value):
     if value is None:
         return None
     p = Path(value)
-    text = p.read_text(encoding="utf-8") if p.exists() else value
+    text = p.read_text(encoding="utf-8-sig") if p.exists() else value
     return json.loads(text) if text.strip() else None
 
 
@@ -127,7 +127,7 @@ def main():
     ap.add_argument("--traceability")
     args = ap.parse_args()
 
-    config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8-sig"))
     results = compute(
         config,
         args.role,

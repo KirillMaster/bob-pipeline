@@ -28,7 +28,7 @@ def fail(violations):
 
 def validate_registry(path: Path) -> list:
     violations = []
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     entries = data.get("entries") if isinstance(data, dict) else None
     if not isinstance(entries, list) or not entries:
         return [{"path": str(path), "message": "registry must contain a non-empty 'entries' list"}]
@@ -62,8 +62,8 @@ def validate_config(config_path: Path, schema_path: Path) -> list:
     except ImportError:
         return [{"path": "environment", "message": "jsonschema package is required: pip install jsonschema pyyaml"}]
 
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8-sig"))
+    schema = json.loads(schema_path.read_text(encoding="utf-8-sig"))
     violations = [
         {"path": "/".join(str(p) for p in err.absolute_path) or "<root>", "message": err.message}
         for err in jsonschema.Draft202012Validator(schema).iter_errors(config)

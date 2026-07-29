@@ -158,7 +158,7 @@ def main():
         sys.exit(2)
     parser, path = sys.argv[1], Path(sys.argv[2])
     try:
-        result = PARSERS[parser](path.read_text(encoding="utf-8", errors="replace"))
+        result = PARSERS[parser](path.read_text(encoding="utf-8-sig", errors="replace"))
     except (ParseError, json.JSONDecodeError, ET.ParseError, OSError) as e:
         json.dump({"error": f"{parser}: {e}", "report": str(path)}, sys.stderr)
         sys.stderr.write("\n")
