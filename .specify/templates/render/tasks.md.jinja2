@@ -1,0 +1,43 @@
+# Tasks: {{ feature }}
+
+{% for task in tasks %}
+## `{{ task.id }}` {{ task.title }}{% if task.parallelizable %} [P]{% endif %} [{{ task.story_ref }}]
+
+{{ task.description }}
+
+**Context**: {{ task.context }}
+
+- **Depends on**: {{ task.depends_on | join(', ') if task.depends_on else '—' }}
+- **Requirements**: {{ task.requirement_refs | join(', ') if task.requirement_refs else '—' }}
+- **Entities**: {{ task.entity_refs | join(', ') if task.entity_refs else '—' }}
+- **Contracts**: {{ task.contract_refs | join(', ') if task.contract_refs else '—' }}
+
+**Steps**:
+
+{% for step in task.steps %}
+{{ step.order }}. **{{ step.action }}** — {{ step.detail }}
+{% endfor %}
+
+**Technical Notes**:
+
+{% for note in task.technical_notes %}
+- `{{ note.path }}`: {{ note.note }}
+{% endfor %}
+
+**Acceptance Criteria**:
+
+{% for ac in task.acceptance_criteria %}
+- [{{ 'x' if ac.done else ' ' }}] `{{ ac.id }}` {{ ac.description }}
+{% endfor %}
+
+**Test Scenarios**:
+
+{% for ts in task.test_scenarios %}
+- `{{ ts.id }}` ({{ ts.level }}{% if ts.automation_ref %}, `{{ ts.automation_ref }}`{% endif %})
+  - Given: {{ ts.given | join('; ') }}
+  - When: {{ ts.when }}
+  - Then: {{ ts.then | join('; ') }}
+  - Verification: {{ ts.verification | join(', ') }}
+{% endfor %}
+
+{% endfor %}

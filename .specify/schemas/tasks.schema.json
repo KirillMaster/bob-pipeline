@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/tasks.schema.json",
+  "title": "tasks.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature", "tasks"],
+  "properties": {
+    "feature": { "type": "string", "minLength": 1 },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "title", "description", "context", "story_ref", "requirement_refs",
+          "depends_on", "parallelizable", "entity_refs", "contract_refs",
+          "steps", "technical_notes", "acceptance_criteria", "test_scenarios"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^T[0-9]+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "context": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One or two sentences: why this task exists, in plain language — no jargon, no upstream restatement."
+          },
+          "story_ref": { "type": "string", "pattern": "^US[0-9]+$" },
+          "requirement_refs": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^FR-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$" }
+          },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^T[0-9]+$" }
+          },
+          "parallelizable": { "type": "boolean" },
+          "entity_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "contract_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Ordered, mechanical implementation steps — a developer follows these in sequence with no external lookup needed.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["order", "action", "detail"],
+              "properties": {
+                "order": { "type": "integer", "minimum": 1 },
+                "action": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Single imperative verb phrase, e.g. 'Add field X to Y', 'Write test for Z'."
+                },
+                "detail": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The concrete how: exact names/paths/values needed to execute this step without guessing."
+                }
+              }
+            }
+          },
+          "technical_notes": {
+            "type": "array",
+            "description": "Concrete pointers into the codebase this task touches — files/modules/functions, not prose descriptions of them.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "note"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "note": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "acceptance_criteria": { "$ref": "_common.schema.json#/$defs/acceptanceCriteriaList" },
+          "test_scenarios": { "$ref": "_common.schema.json#/$defs/testScenariosList" }
+        }
+      }
+    }
+  },
+  "$comment": "Gate additionally rejects: (1) any story_ref/requirement_refs/depends_on/entity_refs/contract_refs value that does not resolve to an id defined in spec.yaml/data-model.yaml/contracts.yaml/this file respectively (dangling reference, per Edge Cases in spec.md); (2) any depends_on cycle; (3) steps[].order not forming a contiguous 1..N sequence."
+}

@@ -1,0 +1,10 @@
+project_name: "[PROJECT NAME]"
+version: "1.0.0"
+ratified: "[YYYY-MM-DD]"
+last_amended: "[YYYY-MM-DD]"
+principles:
+  - id: "P1"
+    name: "[Principle name]"
+    description: "[Declarative, testable rule and its rationale]"
+    severity: "NON-NEGOTIABLE"
+    gate_condition: "[Machine-checkable condition a plan/task must satisfy to pass this principle's gate]"

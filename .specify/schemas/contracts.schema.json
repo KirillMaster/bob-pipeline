@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/contracts.schema.json",
+  "title": "contracts.yaml (the artifact produced by the contracts/data-model workflow stage, US5/FR-017)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature", "contracts"],
+  "properties": {
+    "feature": { "type": "string", "minLength": 1 },
+    "contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "kind", "response_cases", "entity_refs"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "enum": ["interface", "implementation"] },
+          "implements_ref": { "type": "string", "minLength": 1 },
+          "request": {
+            "type": "array",
+            "items": { "$ref": "data-model.schema.json#/$defs/field" }
+          },
+          "response_cases": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["outcome", "fields"],
+              "properties": {
+                "outcome": { "type": "string", "minLength": 1 },
+                "fields": {
+                  "type": "array",
+                  "items": { "$ref": "data-model.schema.json#/$defs/field" }
+                }
+              }
+            }
+          },
+          "entity_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "implementation" } } },
+            "then": { "required": ["implements_ref"] }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "interface" } } },
+            "then": { "not": { "required": ["implements_ref"] } }
+          }
+        ]
+      }
+    }
+  },
+  "$comment": "Generalizes two structural patterns observed in real-world typed ticket contracts (kept domain-agnostic, see research.md #5): response_cases is the generic status/outcome-mapping pattern (every distinct result named and typed, not just a happy path plus error prose); kind + implements_ref is the generic interface/implementation (port/adapter) distinction, applicable to any project regardless of domain. Gate additionally rejects any entity_refs / implements_ref that does not resolve to a defined id in data-model.yaml / this file respectively."
+}

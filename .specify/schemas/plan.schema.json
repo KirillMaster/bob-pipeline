@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/plan.schema.json",
+  "title": "plan.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature", "branch", "summary", "technical_context", "constitution_check", "project_structure"],
+  "properties": {
+    "feature": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+
+    "technical_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "language_version", "primary_dependencies", "storage", "testing",
+        "target_platform", "project_type", "performance_goals",
+        "constraints", "scale_scope"
+      ],
+      "properties": {
+        "language_version": { "type": "string", "minLength": 1 },
+        "primary_dependencies": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "storage": { "type": "string", "minLength": 1 },
+        "testing": { "type": "string", "minLength": 1 },
+        "target_platform": { "type": "string", "minLength": 1 },
+        "project_type": { "type": "string", "minLength": 1 },
+        "performance_goals": { "type": "string", "minLength": 1 },
+        "constraints": { "type": "string", "minLength": 1 },
+        "scale_scope": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "constitution_check": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["principle_id", "status"],
+        "properties": {
+          "principle_id": { "type": "string", "pattern": "^P[0-9]+$" },
+          "status": { "type": "string", "enum": ["pass", "fail", "not_applicable"] },
+          "justification": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "fail" } } },
+            "then": { "required": ["justification"] }
+          }
+        ]
+      }
+    },
+
+    "project_structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout", "description", "directories"],
+      "properties": {
+        "layout": { "type": "string", "enum": ["single_project", "web_application", "mobile_and_api"] },
+        "description": { "type": "string", "minLength": 1 },
+        "directories": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  },
+  "$comment": "Gate rejects any technical_context string field literally equal to a NEEDS CLARIFICATION marker, and any constitution_check.principle_id not defined in constitution.yaml."
+}

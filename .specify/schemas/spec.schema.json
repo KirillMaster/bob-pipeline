@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/spec.schema.json",
+  "title": "spec.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "feature", "branch", "created", "status", "input",
+    "user_stories", "edge_cases", "functional_requirements",
+    "key_entities", "success_criteria", "assumptions"
+  ],
+  "properties": {
+    "feature": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "created": { "type": "string", "format": "date" },
+    "status": { "type": "string", "enum": ["Draft", "Clarified", "Planned", "InProgress", "InReview", "Complete", "Deployed", "Superseded"] },
+    "status_note": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional free-text preservation of the original source status line (verbatim wording and/or date), for readiness/lifecycle detail the enum cannot capture, e.g. 'Done ✅ (2026-06-29)' or 'Revised 2026-07-16 (Rev2)'."
+    },
+    "input": { "type": "string", "minLength": 1 },
+
+    "user_stories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "title", "priority", "description", "motivation", "why_priority",
+          "independent_test", "acceptance_scenarios",
+          "acceptance_criteria", "test_scenarios"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^US[0-9]+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "priority": { "type": "string", "enum": ["P1", "P2", "P3"] },
+          "description": { "type": "string", "minLength": 1 },
+          "motivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["problem", "value", "consequence_if_skipped"],
+            "properties": {
+              "problem": { "type": "string", "minLength": 1 },
+              "value": { "type": "string", "minLength": 1 },
+              "consequence_if_skipped": { "type": "string", "minLength": 1 }
+            }
+          },
+          "why_priority": { "type": "string", "minLength": 1 },
+          "independent_test": { "type": "string", "minLength": 1 },
+          "acceptance_scenarios": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "given", "when", "then"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^AS-[0-9]+$" },
+                "given": { "type": "string", "minLength": 1 },
+                "when": { "type": "string", "minLength": 1 },
+                "then": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "acceptance_criteria": { "$ref": "_common.schema.json#/$defs/acceptanceCriteriaList" },
+          "test_scenarios": { "$ref": "_common.schema.json#/$defs/testScenariosList" }
+        }
+      }
+    },
+
+    "edge_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "expected_behavior"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^EC-[0-9]+$" },
+          "description": { "type": "string", "minLength": 1 },
+          "expected_behavior": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "functional_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^FR-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$" },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\b(SHALL|MUST|WHEN)\\b"
+          },
+          "category": {
+            "type": "string",
+            "description": "Distinguishes functional from non-functional requirements sharing one FR-NNN numbering sequence. Defaults to 'functional' when omitted.",
+            "enum": ["functional", "non_functional"]
+          },
+          "status": {
+            "type": "string",
+            "description": "Lifecycle/confidence marker for the requirement, for source prose that carries inline markers like '(PRELIMINARY)' or a strikethrough/REMOVED note. Defaults to 'final' when omitted.",
+            "enum": ["final", "preliminary", "deprecated"]
+          },
+          "refs": {
+            "type": "array",
+            "description": "External references (tickets, ADRs, discussion threads) as opaque strings — no schema-level meaning attached. Separate from story_refs, which is specifically for US-id links.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "story_refs": {
+            "type": "array",
+            "description": "Optional links to user_stories[].id. Not every requirement maps to a user story.",
+            "items": { "type": "string", "pattern": "^US[0-9]+$" }
+          }
+        }
+      }
+    },
+
+    "key_entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "success_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "measurable_via"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^SC-[0-9]+[a-z]?$" },
+          "description": { "type": "string", "minLength": 1 },
+          "measurable_via": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^A-[0-9]+$" },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+
+  "$comment": "Gate also rejects any string value anywhere in this document equal to a NEEDS CLARIFICATION marker or containing a dangling US/FR id reference; both checks run as a second validation pass beyond plain schema conformance (see plan.md FR-006 / research.md #4)."
+}

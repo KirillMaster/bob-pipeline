@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/adr.schema.json",
+  "title": "adr.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "status", "context", "decision", "consequences"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^ADR-[0-9]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["Proposed", "Accepted", "Rejected", "Deprecated", "Superseded"]
+    },
+    "decided_date": { "type": "string", "format": "date" },
+    "supersedes": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^ADR-[0-9]+$" }
+    },
+    "superseded_by": { "type": "string", "pattern": "^ADR-[0-9]+$" },
+    "refs": {
+      "type": "array",
+      "description": "External references (tickets, docs, discussion threads) as opaque strings — no schema-level meaning attached.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "context": { "type": "string", "minLength": 1 },
+    "decision": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "detail"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^D-[0-9]+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "consequences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "positive": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "negative": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "out_of_scope": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "amends_documents": {
+      "type": "array",
+      "description": "Other artifacts whose prior content this ADR invalidates/reverses (paperwork trail).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["document", "description"],
+        "properties": {
+          "document": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

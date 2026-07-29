@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/data-model.schema.json",
+  "title": "data-model.yaml (the artifact produced by the contracts/data-model workflow stage, US5/FR-017)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature", "entities"],
+  "properties": {
+    "feature": { "type": "string", "minLength": 1 },
+    "entities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entity" }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "required", "description"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "boolean", "enum", "array", "object", "id_ref"]
+        },
+        "required": { "type": "boolean" },
+        "enum_values": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "description": { "type": "string", "minLength": 1 }
+      },
+      "if": { "properties": { "type": { "const": "enum" } } },
+      "then": { "required": ["enum_values"] }
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "fields", "relationships"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field" } },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "target_entity_ref", "cardinality"],
+            "properties": {
+              "field": { "type": "string", "minLength": 1 },
+              "target_entity_ref": { "type": "string", "minLength": 1 },
+              "cardinality": { "type": "string", "enum": ["one", "many"] }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$comment": "Gate rejects any relationships[].target_entity_ref that does not resolve to another entity.id defined in this same document (dangling reference, satisfying SC-007 together with the tasks.yaml/contracts.yaml checks)."
+}

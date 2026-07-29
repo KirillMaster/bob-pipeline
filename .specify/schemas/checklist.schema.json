@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/checklist.schema.json",
+  "title": "checklist.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "categories"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Checklist heading, e.g. 'Specification Quality Checklist: Carts Service Foundation (E1)' or 'Consistency Check — Layer 2'."
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What this checklist validates, e.g. 'Validate specification completeness and quality before implementation'."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text scope note: single feature (per-spec) vs cross-spec/singleton, and what it does not cover."
+    },
+    "created": { "type": "string", "format": "date" },
+    "feature": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Generic free-text reference to the feature/spec this checklist covers (link or name); omitted for cross-spec checklists."
+    },
+    "canonical_sources": {
+      "type": "array",
+      "description": "Ordered tie-breaker sources cited by cross-spec checklists when artifacts disagree (e.g. constitution, decision log). Opaque strings.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "items"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text section heading, e.g. 'Content Quality', 'Requirement Completeness', 'Constitution Compliance'. Not enumerated — varies per checklist purpose."
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["description", "checked"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^CHK-?[0-9]+$",
+                  "description": "Sequential item id (e.g. CHK001 or CHK-001). Optional — many real checklists use plain checkbox bullets with no explicit id."
+                },
+                "description": { "type": "string", "minLength": 1 },
+                "checked": {
+                  "type": "boolean",
+                  "description": "true for '- [x]', false for '- [ ]'."
+                },
+                "notes": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Free-text evidence/finding/gap noted inline or in a trailing Notes section for this item."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "Trailing free-text notes not tied to a single item (e.g. a checklist's closing '## Notes' section).",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

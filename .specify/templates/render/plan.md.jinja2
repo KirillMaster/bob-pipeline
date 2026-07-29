@@ -1,0 +1,39 @@
+# Implementation Plan: {{ feature }}
+
+**Branch**: `{{ branch }}`
+
+## Summary
+
+{{ summary }}
+
+## Technical Context
+
+- **Language/Version**: {{ technical_context.language_version }}
+- **Primary Dependencies**: {{ technical_context.primary_dependencies | join(', ') }}
+- **Storage**: {{ technical_context.storage }}
+- **Testing**: {{ technical_context.testing }}
+- **Target Platform**: {{ technical_context.target_platform }}
+- **Project Type**: {{ technical_context.project_type }}
+- **Performance Goals**: {{ technical_context.performance_goals }}
+- **Constraints**: {{ technical_context.constraints }}
+- **Scale/Scope**: {{ technical_context.scale_scope }}
+
+## Constitution Check
+
+| Principle | Status | Justification |
+|---|---|---|
+{% for entry in constitution_check %}
+| `{{ entry.principle_id }}` | {{ entry.status }} | {{ entry.justification if entry.justification else '—' }} |
+{% endfor %}
+
+## Project Structure
+
+**Layout**: {{ project_structure.layout }}
+
+{{ project_structure.description }}
+
+**Directories**:
+
+{% for dir in project_structure.directories %}
+- `{{ dir }}`
+{% endfor %}

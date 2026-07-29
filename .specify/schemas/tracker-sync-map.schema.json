@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/tracker-sync-map.schema.json",
+  "title": "tracker-sync-map.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature_or_scope", "epics"],
+  "$defs": {
+    "ticket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "summary", "status", "spec_coverage"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]+-[0-9]+$",
+          "description": "Generic issue-tracker ticket-key shape (project-prefix + number); the prefix itself is an opaque value, never enumerated here. Works for any tracker (Jira, Linear, GitHub-style project keys, etc.)."
+        },
+        "summary": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-text tracker status as written in the source doc (may include a legend glyph, e.g. '✅ Done', '🔄 In Progress', '📋 To Do', '⛔ Blocked', '❌ Cancelled', or a plain word like 'Active'/'Analyse'). Not a closed enum — trackers add new statuses over time, and status vocabularies differ across tools."
+        },
+        "spec_coverage": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-text pointer back into the spec (e.g. a User Story id and title, a cross-epic arrow, 'Meta: ...', or 'N/A' with a reason) — not a structured ref list."
+        }
+      }
+    }
+  },
+  "properties": {
+    "feature_or_scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Title / scope of this cross-spec tracking document."
+    },
+    "legend": {
+      "type": "array",
+      "description": "Optional restatement of the status-glyph legend used in the source doc, as opaque strings.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "epics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "tickets"],
+        "properties": {
+          "epic_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]+-[0-9]+$",
+            "description": "Omitted when the source doc marks the epic as having no tracker key yet (e.g. '(No epic)')."
+          },
+          "name": { "type": "string", "minLength": 1 },
+          "spec_ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Link/path to the epic's own spec file, as an opaque string."
+          },
+          "tickets": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/ticket" }
+          }
+        }
+      }
+    },
+    "discovered_tickets": {
+      "type": "array",
+      "description": "Tickets found during sync that weren't part of the original epic search.",
+      "items": { "$ref": "#/$defs/ticket" }
+    },
+    "gaps": {
+      "type": "array",
+      "description": "Tickets that exist but currently lack (or only loosely propose) spec coverage.",
+      "items": { "$ref": "#/$defs/ticket" }
+    },
+    "missing_tickets": {
+      "type": "array",
+      "description": "Spec-side requirements that have no tracker ticket yet.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["spec", "requirement"],
+        "properties": {
+          "spec": { "type": "string", "minLength": 1 },
+          "requirement": { "type": "string", "minLength": 1 },
+          "proposed_ticket": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text note on what ticket should be created, if stated."
+          }
+        }
+      }
+    }
+  }
+}

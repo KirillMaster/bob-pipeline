@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/open-questions.schema.json",
+  "title": "open-questions.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature", "open_questions"],
+  "properties": {
+    "feature": { "type": "string", "minLength": 1 },
+    "open_questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "question", "status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^OQ-[A-Z0-9-]+$" },
+          "question": { "type": "string", "minLength": 1 },
+          "impact": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Why this matters / what it blocks if left unanswered."
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Generic free-text owner (person, team, or role) — no enumerated values."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["Open", "Resolved", "Deferred", "Blocked"]
+          },
+          "resolution": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Filled once the question moves to Resolved (or Deferred with a stated reason)."
+          },
+          "raised_date": { "type": "string", "format": "date" },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text follow-up context that doesn't fit question/impact/resolution."
+          },
+          "refs": {
+            "type": "array",
+            "description": "External references (tickets, ADRs, requirement/story ids, discussion threads) as opaque strings — no schema-level meaning attached.",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

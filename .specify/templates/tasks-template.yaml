@@ -1,0 +1,30 @@
+feature: "[FEATURE NAME]"
+tasks:
+  - id: "T001"
+    title: "[Short imperative title]"
+    description: "[What this task accomplishes]"
+    context: "[One or two sentences: why this task exists, in plain language]"
+    story_ref: "US1"
+    requirement_refs: ["FR-001"]
+    depends_on: []
+    parallelizable: false
+    entity_refs: []
+    contract_refs: []
+    steps:
+      - order: 1
+        action: "[Single imperative verb phrase]"
+        detail: "[Exact names/paths/values needed to execute this step without guessing]"
+    technical_notes:
+      - path: "[file/module path]"
+        note: "[What's relevant here]"
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "[Observable, checkable outcome]"
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given: ["[precondition]"]
+        when: "[action]"
+        then: ["[expected outcome]"]
+        verification: ["automated"]
+        level: "unit"

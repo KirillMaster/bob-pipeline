@@ -1,0 +1,61 @@
+feature: "[FEATURE NAME]"
+branch: "[BRANCH NAME]"
+created: "[YYYY-MM-DD]"
+status: "Draft"
+input: "[Verbatim feature description provided by the user]"
+
+user_stories:
+  - id: "US1"
+    title: "[Short title]"
+    priority: "P1"
+    description: "[What the user does and why]"
+    motivation:
+      problem: "[What is broken/missing today]"
+      value: "[What gets better once this ships]"
+      consequence_if_skipped: "[What stays broken/risky if dropped]"
+    why_priority: "[Why this priority level]"
+    independent_test: "[How to verify this story in isolation]"
+    acceptance_scenarios:
+      - id: "AS-1"
+        given: "[Initial state]"
+        when: "[Action taken]"
+        then: "[Expected outcome]"
+    acceptance_criteria:
+      - id: "AC-1"
+        description: "[A single, individually checkable statement of done]"
+        done: false
+    test_scenarios:
+      - id: "TS-1"
+        given:
+          - "[Precondition]"
+        when: "[Triggering action]"
+        then:
+          - "[Expected outcome]"
+        verification:
+          - "manual"
+        level: "unit"
+
+edge_cases:
+  - id: "EC-1"
+    description: "[Edge case scenario]"
+    expected_behavior: "[What should happen]"
+
+functional_requirements:
+  - id: "FR-001"
+    text: "The system MUST [testable requirement, EARS style: SHALL/MUST/WHEN...THEN]"
+    story_refs:
+      - "US1"
+
+key_entities:
+  - id: "E-1"
+    name: "[Entity name]"
+    description: "[What it represents]"
+
+success_criteria:
+  - id: "SC-001"
+    description: "[Measurable, technology-agnostic outcome]"
+    measurable_via: "[How this is measured/verified]"
+
+assumptions:
+  - id: "A-1"
+    description: "[Assumption made in absence of clarification]"

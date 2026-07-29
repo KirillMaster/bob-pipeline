@@ -1,0 +1,14 @@
+# {{ project_name }} Constitution
+
+**Version**: {{ version }} | **Ratified**: {{ ratified }} | **Last Amended**: {{ last_amended }}
+
+## Principles
+
+{% for p in principles %}
+### `{{ p.id }}` {{ p.name }} ({{ p.severity }})
+
+{{ p.description }}
+
+**Gate condition**: {{ p.gate_condition }}
+
+{% endfor %}

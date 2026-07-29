@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/error-codes.schema.json",
+  "title": "error-codes.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature_or_scope", "endpoints"],
+  "properties": {
+    "feature_or_scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the cross-spec catalogue or scope this error-code document covers."
+    },
+    "endpoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "errors"],
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PATCH", "PUT", "DELETE"],
+            "description": "HTTP method. Omitted for cross-cutting sections that apply to multiple endpoints/methods rather than one route."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Route path for a single-endpoint section, or the section's free-text scope/label for cross-cutting sections (e.g. 'Rate Limiting (cross-cutting, API gateway)')."
+          },
+          "applies_to": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text note on which endpoints/methods a cross-cutting section applies to, when path is a scope label rather than a concrete route."
+          },
+          "errors": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["http_status", "description"],
+              "properties": {
+                "http_status": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599
+                },
+                "error_code": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]*$",
+                  "description": "Omitted for rows with no machine-readable code (e.g. idempotent success responses, graceful-degradation responses)."
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

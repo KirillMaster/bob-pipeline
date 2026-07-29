@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/decision-log.schema.json",
+  "title": "decision-log.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scope", "entries"],
+  "properties": {
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Title / purpose of this singleton ADR-registry document (e.g. 'Decision Log — ADR Registry (authoritative index)')."
+    },
+    "canonical_homes": {
+      "type": "array",
+      "description": "Where each ADR-number range's authoritative content actually lives (e.g. narrative doc vs local files).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["range", "canonical_source"],
+        "properties": {
+          "range": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ADR number or range this row covers, as written in the source (e.g. 'ADR-001 … ADR-019', 'ADR-020, ADR-021, ADR-023')."
+          },
+          "canonical_source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Where the authoritative content lives (external doc, mirrored file, local files, etc.)."
+          },
+          "materialized_as": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text note on physical materialization (e.g. 'narrative only', '✅ files exist', '⛔ no file yet')."
+          }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The current, authoritative ADR-number -> decision -> status scheme.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "decision", "status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^ADR-[0-9]+$" },
+          "decision": { "type": "string", "minLength": 1 },
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text status cell as written in the source doc — may mix lifecycle state, ratification date, and a file path/link (e.g. 'Accepted 2026-07-17 · specs/.../ADR-020-....md', 'Superseded by ADR-020'). Not a closed enum."
+          }
+        }
+      }
+    },
+    "pending": {
+      "type": "array",
+      "description": "ADRs referenced/numbered but not yet written as files.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "decision"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^ADR-[0-9]+$" },
+          "decision": { "type": "string", "minLength": 1 },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Where the ADR file must be written once created."
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Condition/event that should prompt writing the actual ADR file."
+          }
+        }
+      }
+    },
+    "deprecated_numbering": {
+      "type": "array",
+      "description": "Old-vs-current ADR numbering conflicts to warn against (e.g. a stale session-restore doc reusing ADR numbers for different decisions).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["old", "current"],
+        "properties": {
+          "old": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text description of the old/superseded numbering, as written in the source (may combine an ADR id and its old meaning in one cell)."
+          },
+          "current": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text description of the current/canonical numbering for the same slot."
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "Catch-all for narrative asides that don't fit the tables above (gap notes, provenance-source trails, known-stale-artifact warnings), kept as opaque strings.",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

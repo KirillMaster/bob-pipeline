@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/clarify-qa.schema.json",
+  "title": "clarify-qa.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["feature", "clarifications"],
+  "properties": {
+    "feature": { "type": "string", "minLength": 1 },
+    "clarifications": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "question", "options", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]+-Q[0-9]+$",
+            "description": "Scoped question id, e.g. '{PHASE}-Q{N}' or '{AREA}-Q{N}'. The prefix before '-Q' is free-text (epic, phase, or cross-cutting area label) and carries no schema-level meaning."
+          },
+          "question": { "type": "string", "minLength": 1 },
+          "gap": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What is underspecified or contradictory across the source documents, and why it needs a decision."
+          },
+          "options": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["label", "description"],
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Short opaque option identifier (e.g. a letter or short tag), unique within the question's options."
+                },
+                "description": { "type": "string", "minLength": 1 },
+                "recommended": {
+                  "type": "boolean",
+                  "description": "True if this option is the one recommended at authoring time. Omit rather than set false."
+                }
+              }
+            }
+          },
+          "recommendation": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text summary of the recommended option and rationale, as stated when the question was raised."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["Open", "Answered", "Deferred"]
+          },
+          "answer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["chosen_option", "decision"],
+            "properties": {
+              "chosen_option": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Free-text resolution reference: one of the options' labels, a combination (e.g. 'C + custom'), a variant ('D minus X'), or 'Moot'/'Custom' when no listed option applies as-is."
+              },
+              "decision": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What was actually decided, in the answerer's own words."
+              },
+              "answered_date": { "type": "string", "format": "date" },
+              "notes": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Follow-up context: caveats, people to confirm with, open sub-risks."
+              }
+            }
+          },
+          "refs": {
+            "type": "array",
+            "description": "External references (tickets, ADRs, requirement/story ids, discussion threads) as opaque strings — no schema-level meaning attached.",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

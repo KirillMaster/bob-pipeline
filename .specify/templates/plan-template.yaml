@@ -1,0 +1,26 @@
+feature: "[FEATURE NAME]"
+branch: "[BRANCH NAME]"
+summary: "[One or two sentences: what is being built and the primary technical approach]"
+
+technical_context:
+  language_version: "[e.g. Python 3.12 / NEEDS CLARIFICATION]"
+  primary_dependencies: []
+  storage: "[e.g. N/A, PostgreSQL, filesystem / NEEDS CLARIFICATION]"
+  testing: "[e.g. pytest / NEEDS CLARIFICATION]"
+  target_platform: "[e.g. Linux server, cross-platform CLI / NEEDS CLARIFICATION]"
+  project_type: "[single_project | web_application | mobile_and_api]"
+  performance_goals: "[e.g. p95 < 200ms / NEEDS CLARIFICATION]"
+  constraints: "[e.g. offline-capable, <100MB memory / NEEDS CLARIFICATION]"
+  scale_scope: "[e.g. 10k users, single-tenant / NEEDS CLARIFICATION]"
+
+constitution_check:
+  - principle_id: "P1"
+    status: "pass"
+    justification: ""
+
+project_structure:
+  layout: "single_project"
+  description: "[Where code/tests live and why this layout was chosen]"
+  directories:
+    - "[e.g. src/]"
+    - "[e.g. tests/]"

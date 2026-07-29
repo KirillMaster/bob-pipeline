@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit.local/schemas/verification-report.schema.json",
+  "title": "verification-report.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "report_date", "checks", "findings"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Report heading, e.g. 'Specification Verification Report' or 'Consistency Report — 2026-07-20'."
+    },
+    "report_date": { "type": "string", "format": "date" },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text verifier/validator identity, e.g. 'AI Spec Analyst (Claude Opus 4.6)'."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text description of what corpus/specs/layer this report audits, and what it deliberately excludes."
+    },
+    "canonical_sources": {
+      "type": "array",
+      "description": "Ordered tie-breaker sources cited when audited artifacts disagree (e.g. constitution, decision log). Opaque strings.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text executive summary / narrative overview of the report's outcome."
+    },
+    "checks": {
+      "type": "array",
+      "description": "Individual checks/invariant groups run during this audit, each with a pass/fail-style result. May be empty if the report is findings-only.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "result"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text check or invariant-group name, e.g. 'Spec-Plan-Tasks Consistency', 'ADR integrity', 'Error Code Coverage'. Not enumerated — varies per report purpose."
+          },
+          "result": {
+            "type": "string",
+            "enum": ["Pass", "Fail", "Warning", "Partial", "Skipped"],
+            "description": "Generic verdict for this check. Reports using richer wording (e.g. 'PARTIAL PASS') should map to the closest of these."
+          },
+          "details": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text elaboration, evidence, or metrics for this check (e.g. counts, before/after deltas)."
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Issues/gaps surfaced by the audit, each with a severity and description. May be empty if all checks passed clean.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text finding id/number as written in the source (e.g. 'GAP-1', 'Finding 1', '#3'). Not a fixed pattern — numbering schemes vary per report."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["Critical", "High", "Medium", "Low"],
+            "description": "Free-standing severity/priority tier. Omit if the source report doesn't grade findings."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The finding itself, e.g. a contradiction, missing artifact, or coverage gap."
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text current disposition, e.g. 'FIXED', 'Open', 'Not auto-fixed — needs decision'."
+          },
+          "resolution": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text recommended or applied fix / next action for this finding."
+          },
+          "refs": {
+            "type": "array",
+            "description": "External references (files, line numbers, tickets, ADRs) as opaque strings — no schema-level meaning attached.",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "readiness": {
+      "type": "array",
+      "description": "Per-scope readiness/verdict assessment, when the report grades multiple specs/areas individually rather than giving one overall verdict.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scope", "verdict"],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text name of the spec/area being graded, e.g. 'E1 — Carts Service Foundation'."
+          },
+          "verdict": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text readiness verdict as written in the source, e.g. 'READY', 'READY WITH CAVEATS', 'PASS'."
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text explanation for the verdict."
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text overall conclusion for the report as a whole, when a single top-level verdict is stated (distinct from per-scope readiness)."
+    },
+    "recommended_actions": {
+      "type": "array",
+      "description": "Ordered follow-up actions recommended by the report (e.g. 'Before Sprint Planning', 'Before Go-Live' lists), flattened.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description"],
+        "properties": {
+          "priority": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text priority/urgency label as written in the source (e.g. 'CRITICAL', 'Before Go-Live'). Not enumerated — varies per report."
+          },
+          "description": { "type": "string", "minLength": 1 },
+          "owner": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Generic free-text owner (person, team, or role) — no enumerated values."
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "Catch-all for narrative asides that don't fit the sections above (minor caveats, provenance notes), kept as opaque strings.",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
