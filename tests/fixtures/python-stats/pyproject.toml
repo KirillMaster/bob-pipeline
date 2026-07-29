@@ -1,0 +1,12 @@
+[project]
+name = "python-stats-fixture"
+version = "1.0.0"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["scenario(id): trace a test to a Gherkin scenario"]
+
+[tool.mutmut]
+paths_to_mutate = "src/"
+tests_dir = "tests/"
