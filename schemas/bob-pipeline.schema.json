@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bob-pipeline configuration",
+  "type": "object",
+  "required": ["version", "project_name", "stack", "roles", "tools", "human_gates", "thresholds", "send_back_routes", "return_limit", "parallel_limit", "night_mode_default"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "enum": ["1"] },
+    "project_name": { "type": "string", "minLength": 1 },
+    "stack": { "type": "string", "minLength": 1 },
+    "roles": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/role" }
+    },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool" }
+    },
+    "human_gates": {
+      "type": "object",
+      "required": ["gherkin_approval", "final_qa_report"],
+      "additionalProperties": false,
+      "properties": {
+        "gherkin_approval": { "type": "boolean" },
+        "final_qa_report": { "type": "boolean" }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "required": ["mutation_score_min", "coverage_policy", "complexity_policy", "duplication_policy"],
+      "additionalProperties": false,
+      "properties": {
+        "mutation_score_min": { "type": "number", "minimum": 0, "maximum": 100 },
+        "coverage_policy": { "type": "string", "enum": ["informational"] },
+        "complexity_policy": { "type": "string", "enum": ["not-worse-than-baseline", "off"] },
+        "duplication_policy": { "type": "string", "enum": ["not-worse-than-baseline", "off"] }
+      }
+    },
+    "send_back_routes": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/$defs/roleName" },
+          { "type": "array", "items": { "$ref": "#/$defs/roleName" }, "minItems": 1 }
+        ]
+      },
+      "propertyNames": { "enum": ["specifier", "coder", "cleaner", "architect", "hardener", "qa"] }
+    },
+    "return_limit": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "parallel_limit": { "type": "integer", "minimum": 1, "maximum": 8 },
+    "bdd_framework": { "type": "string", "enum": ["reqnroll", "cucumber-js", "behave"] },
+    "night_mode_default": { "type": "boolean" }
+  },
+  "$defs": {
+    "roleName": {
+      "type": "string",
+      "enum": ["specifier", "coder", "cleaner", "architect", "hardener", "qa"]
+    },
+    "role": {
+      "type": "object",
+      "required": ["name", "model", "enabled", "gates"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/roleName" },
+        "model": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" },
+        "gates": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["tests-green", "mutation-score", "complexity-baseline", "duplication-baseline", "gherkin-traceability"]
+          }
+        },
+        "degradation": { "type": "string" }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": ["stack", "category", "tool", "run_command", "report_parser", "enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "stack": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "enum": ["mutation", "coverage", "complexity", "duplication"] },
+        "tool": { "type": "string", "minLength": 1 },
+        "run_command": { "type": "string", "minLength": 1 },
+        "report_parser": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" }
+      }
+    }
+  }
+}

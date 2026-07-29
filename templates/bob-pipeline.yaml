@@ -1,0 +1,65 @@
+# bob-pipeline configuration — instantiated by /bob-init into .claude/bob-pipeline.yaml
+# Defaults reproduce Uncle Bob's SwarmForge flow. Change via /bob-config (validated),
+# or override per run ("skip Hardener") without touching this file.
+version: "1"
+project_name: "{{PROJECT_NAME}}"
+stack: "{{STACK}}"
+
+# Ordered pipeline. Model is passed to the subagent as an explicit parameter
+# at spawn time (frontmatter model is ignored, Claude Code bug #44385).
+# specifier and coder are non-skippable: a per-run skip request for them is refused.
+roles:
+  - name: specifier
+    model: sonnet
+    enabled: true
+    gates: [gherkin-traceability]
+  - name: coder
+    model: sonnet
+    enabled: true
+    gates: [tests-green]
+  - name: cleaner
+    model: sonnet
+    enabled: true
+    gates: [tests-green, complexity-baseline, duplication-baseline]
+  - name: architect
+    model: sonnet
+    enabled: true
+    gates: [tests-green]
+  - name: hardener
+    model: haiku
+    enabled: true
+    gates: [tests-green, mutation-score]
+    degradation: "no mutation tool: heuristic test strengthening (boundary values, error paths, null/empty inputs); recorded as a deviation"
+  - name: qa
+    model: haiku
+    enabled: true
+    gates: [tests-green, gherkin-traceability]
+
+# Frozen tool selection — filled by /bob-init from registry/tool-registry.yaml
+# (or from confirmed web research for stacks outside the registry).
+tools: {{TOOLS}}
+
+human_gates:
+  gherkin_approval: true   # approve Gherkin + QA procedures + slice breakdown before any code (P2)
+  final_qa_report: true    # deliver the final run report to the human (P7)
+
+thresholds:
+  mutation_score_min: 80          # hard gate for the hardener handoff
+  coverage_policy: informational  # reported, never blocks
+  complexity_policy: not-worse-than-baseline
+  duplication_policy: not-worse-than-baseline
+
+# Semantic send-back routes (mechanical gate failures are always repaired in place
+# by the role that owns them — never routed).
+send_back_routes:
+  qa: coder
+  architect: [cleaner, coder]
+
+return_limit: 3     # max send-backs per slice
+parallel_limit: 3   # max concurrent worktree pipelines over independent slices
+
+# Optional BDD framework (reqnroll | cucumber-js | behave). Absent = plain Gherkin
+# document + test traceability via scenario-id tags.
+# bdd_framework: reqnroll
+
+night_mode_default: false

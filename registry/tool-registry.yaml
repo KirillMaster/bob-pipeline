@@ -1,0 +1,74 @@
+# Quality tool registry for the bob-pipeline plugin.
+# One entry per (stack, category). Entries with stack "any" are the fallback
+# used when no stack-specific entry exists for a category.
+# report_parser names a handler implemented in scripts/parse_reports.py.
+entries:
+  # ── csharp ──────────────────────────────────────────────────────
+  - stack: csharp
+    category: mutation
+    tool: Stryker.NET
+    run_command: "dotnet stryker --reporter json"
+    report_parser: stryker
+    enabled: true
+  - stack: csharp
+    category: coverage
+    tool: coverlet
+    run_command: "dotnet test --collect:\"XPlat Code Coverage\""
+    report_parser: cobertura
+    enabled: true
+
+  # ── typescript / javascript ─────────────────────────────────────
+  - stack: typescript
+    category: mutation
+    tool: StrykerJS
+    run_command: "npx stryker run --reporters json"
+    report_parser: stryker
+    enabled: true
+  - stack: typescript
+    category: coverage
+    tool: runner-coverage
+    run_command: "npx vitest run --coverage --coverage.reporter=lcov || npx jest --coverage --coverageReporters=lcov"
+    report_parser: lcov
+    enabled: true
+
+  # ── python ──────────────────────────────────────────────────────
+  - stack: python
+    category: mutation
+    tool: mutmut
+    run_command: "python -m mutmut run"
+    report_parser: mutmut
+    enabled: true
+  - stack: python
+    category: coverage
+    tool: coverage.py
+    run_command: "python -m coverage run -m pytest && python -m coverage xml"
+    report_parser: cobertura
+    enabled: true
+
+  # ── java ────────────────────────────────────────────────────────
+  - stack: java
+    category: mutation
+    tool: PIT
+    run_command: "mvn org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML"
+    report_parser: pit
+    enabled: true
+  - stack: java
+    category: coverage
+    tool: JaCoCo
+    run_command: "mvn test jacoco:report"
+    report_parser: jacoco
+    enabled: true
+
+  # ── language-agnostic fallbacks ──────────────────────────────────
+  - stack: any
+    category: complexity
+    tool: lizard
+    run_command: "python -m lizard --csv ."
+    report_parser: lizard
+    enabled: true
+  - stack: any
+    category: duplication
+    tool: jscpd
+    run_command: "npx jscpd --reporters json --output .bob/reports ."
+    report_parser: jscpd
+    enabled: true
