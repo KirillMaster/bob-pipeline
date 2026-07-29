@@ -1,4 +1,4 @@
-# Specification Quality Checklist: bob-pipeline — Claude Code plugin (конвейер Uncle Bob)
+# Specification Quality Checklist: bob-pipeline — Claude Code plugin (Uncle Bob pipeline)
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-07-29
@@ -31,6 +31,6 @@
 
 ## Notes
 
-- Упоминания конкретных инструментов (Stryker, mutmut, PIT) вынесены из требований: в FR фигурируют категории («mutation», «coverage», «сложность/дублирование»), конкретика живёт в реестре — допустимо, реестр сам является предметной сущностью фичи (E-5).
-- Названия моделей (sonnet/haiku) и команд (/bob-init и т.д.) — предметные решения гриллинга, зафиксированные пользователем, не техдетали реализации.
-- [NEEDS CLARIFICATION] не потребовались: все ключевые решения приняты на гриллинге (14 вопросов).
+- Mentions of concrete tools (Stryker, mutmut, PIT) were moved out of the requirements: FRs speak in categories ("mutation", "coverage", "complexity/duplication"), while specifics live in the registry — acceptable, since the registry itself is a domain entity of this feature (E-5).
+- Model names (sonnet/haiku) and command names (/bob-init etc.) are domain decisions fixed by the user during grilling, not implementation details.
+- No [NEEDS CLARIFICATION] markers were needed: all key decisions were made during the grilling interview (14 questions).

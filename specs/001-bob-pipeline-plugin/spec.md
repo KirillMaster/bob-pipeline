@@ -2,360 +2,360 @@
      This file is rendered from the corresponding .yaml artifact and will be
      overwritten the next time it is regenerated. Edit the .yaml source instead. -->
 
-# Feature Specification: bob-pipeline — Claude Code plugin: конвейер разработки по флоу Uncle Bob
+# Feature Specification: bob-pipeline — Claude Code plugin: development pipeline following Uncle Bob's flow
 
 **Branch**: `master` | **Created**: 2026-07-29 | **Status**: Draft
 
-**Input**: Плагин Claude Code «bob-pipeline»: конвейер разработки по флоу Uncle Bob (SwarmForge) — 6 ролей-субагентов (Specifier, Coder, Cleaner, Architect, Hardener, QA) вместо код-ревью человеком, «гаунтлет тестов» как гейт качества. Двухрежимный (standalone и поверх yamlkit-артефактов), конфиг через интервью на /bob-init, per-feature override пропуска шагов, гейты человека конфигурируемы (дефолт: аппрув Gherkin+QA-сценариев до кода + финальный QA-отчёт), модели per-role, один worktree на прогон + коммит роли перед handoff, стек-адаптация через реестр тулов с fallback-ресёрчем, Gherkin как документ с трассировкой (BDD-фреймворк опционально), автопочинка на месте + возврат по конвейеру только при семантических провалах (лимит 3), ночной режим, параллельные срезы, /bob-config. v1 включает всё.
+**Input**: Claude Code plugin "bob-pipeline": development pipeline following Uncle Bob's flow (SwarmForge) — 6 subagent roles (Specifier, Coder, Cleaner, Architect, Hardener, QA) replacing human code review, a "test gauntlet" as the quality gate. Two modes (standalone and on top of yamlkit artifacts), config via an interview on /bob-init, per-feature override of skipped steps, configurable human gates (default: approval of Gherkin+QA scenarios before code + final QA report), per-role models, one worktree per run + role commit before handoff, stack adaptation via a tool registry with fallback research, Gherkin as a traceable document (BDD framework optional), in-place auto-fix + pipeline send-back only on semantic failures (limit 3), night mode, parallel slices, /bob-config. v1 includes everything.
 
 ## User Scenarios & Testing
 
-### User Story 1 - Установка и настройка конвейера в проекте (/bob-init) (Priority: P1)
+### User Story 1 - Installing and setting up the pipeline in a project (/bob-init) (Priority: P1)
 
-Разработчик устанавливает плагин в проект и одной командой /bob-init проходит короткое интервью: плагин сканирует проект, определяет технологический стек, подбирает инструменты качества (mutation, coverage, дублирование/сложность) из реестра, разворачивает шесть ролей-агентов, адаптированных под домен и стек проекта, и фиксирует все решения в конфигурационном файле.
+A developer installs the plugin in a project and, with a single /bob-init command, goes through a short interview: the plugin scans the project, determines the technology stack, selects quality tools (mutation, coverage, duplication/complexity) from a registry, deploys six role agents adapted to the project's domain and stack, and records all decisions in a config file.
 
-**Why this priority**: Без инициализации не работает ничего остального — это входная точка плагина.
+**Why this priority**: Nothing else works without initialization — this is the plugin's entry point.
 
 **Motivation**:
-- **Problem**: Дисциплинированный AI-флоу (TDD, гаунтлет тестов, роли) сегодня приходится собирать вручную под каждый проект: промпты ролей, инструменты под стек, пороги качества.
-- **Value**: Один вызов /bob-init превращает любой проект в площадку для конвейера Боба: роли, инструменты и пороги подобраны под стек и зафиксированы воспроизводимо.
-- **Consequence if skipped**: Каждый проект настраивается руками, конфигурации расходятся, коллеги не могут переиспользовать флоу.
+- **Problem**: A disciplined AI flow (TDD, test gauntlet, roles) currently has to be assembled by hand for every project: role prompts, stack-specific tools, quality thresholds.
+- **Value**: A single /bob-init call turns any project into a platform for Bob's pipeline: roles, tools, and thresholds are chosen for the stack and recorded reproducibly.
+- **Consequence if skipped**: Every project is configured by hand, configs drift apart, colleagues can't reuse the flow.
 
-**Independent Test**: В свежем проекте с известным стеком вызвать /bob-init, ответить на вопросы интервью и убедиться, что созданы конфиг и ролевые агенты, а выбранные инструменты соответствуют стеку.
+**Independent Test**: In a fresh project with a known stack, call /bob-init, answer the interview questions, and verify that the config and role agents are created and the selected tools match the stack.
 
 **Acceptance Scenarios**:
 
-1. **Given** Проект на C# без конфигурации bob-pipeline, **When** Разработчик вызывает /bob-init и отвечает на вопросы интервью, **Then** Создан конфиг .claude/bob-pipeline.yaml с ролями, моделями, порогами и инструментами (mutation/coverage/дубликаты) для C#, и в проект развёрнуты 6 ролевых агентов, адаптированных под стек
-2. **Given** Проект на стеке, отсутствующем в реестре инструментов, **When** Разработчик вызывает /bob-init, **Then** Плагин ищет подходящие инструменты в интернете, предлагает найденное разработчику на подтверждение и фиксирует выбор в конфиге; для категорий без найденного инструмента шаг помечается отключённым с явным предупреждением
-3. **Given** Проект с уже существующим конфигом bob-pipeline, **When** Разработчик повторно вызывает /bob-init, **Then** Плагин показывает существующий конфиг и спрашивает, пересоздать или оставить; молча ничего не перезаписывает
+1. **Given** A C# project with no bob-pipeline config, **When** The developer calls /bob-init and answers the interview questions, **Then** A .claude/bob-pipeline.yaml config is created with roles, models, thresholds, and tools (mutation/coverage/duplication) for C#, and 6 role agents adapted to the stack are deployed into the project
+2. **Given** A project on a stack absent from the tool registry, **When** The developer calls /bob-init, **Then** The plugin searches the internet for suitable tools, offers the findings to the developer for confirmation, and records the choice in the config; for categories with no tool found, the step is marked disabled with an explicit warning
+3. **Given** A project with an existing bob-pipeline config, **When** The developer calls /bob-init again, **Then** The plugin shows the existing config and asks whether to recreate or keep it; it never silently overwrites anything
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` После /bob-init в проекте существует машиночитаемый конфиг со списком включённых ролей, моделью на роль, порогами гейтов и выбранными инструментами качества
-- [ ] `AC-2` Ролевые агенты развёрнуты в проект с подставленными значениями проекта (название, домен, стек) вместо плейсхолдеров
-- [ ] `AC-3` Для стеков из реестра (C#, TS/JS, Python, Java) инструменты подобраны без обращения в интернет
-- [ ] `AC-4` Повторный запуск /bob-init не перезаписывает существующую конфигурацию без явного подтверждения
+- [ ] `AC-1` After /bob-init, the project has a machine-readable config listing enabled roles, per-role model, gate thresholds, and selected quality tools
+- [ ] `AC-2` Role agents are deployed into the project with project-specific values (name, domain, stack) substituted in place of placeholders
+- [ ] `AC-3` For stacks present in the registry (C#, TS/JS, Python, Java), tools are selected without any internet access
+- [ ] `AC-4` Re-running /bob-init does not overwrite the existing config without explicit confirmation
 
 **Test Scenarios**:
 
 - `TS-1` (integration)
-  - Given: Свежий C#-проект с csproj и тестовым проектом
-  - When: Выполнен /bob-init с ответами интервью по умолчанию
-  - Then: Конфиг создан и проходит валидацию структуры; В конфиге для C# выбраны инструменты mutation и coverage из реестра; Развёрнуто 6 ролевых агентов без оставшихся плейсхолдеров
+  - Given: A fresh C# project with a csproj and a test project
+  - When: /bob-init is run with default interview answers
+  - Then: The config is created and passes structural validation; The config selects mutation and coverage tools from the registry for C#; 6 role agents are deployed with no remaining placeholders
   - Verification: manual
 - `TS-2` (e2e)
-  - Given: Проект на экзотическом стеке (нет в реестре)
-  - When: Выполнен /bob-init
-  - Then: Предложены найденные в интернете инструменты либо шаг помечен отключённым с предупреждением
+  - Given: A project on an exotic stack (not in the registry)
+  - When: /bob-init is run
+  - Then: Internet-found tools are proposed, or the step is marked disabled with a warning
   - Verification: manual
 
-### User Story 2 - Прогон фичи через конвейер (/bob-run, standalone) (Priority: P1)
+### User Story 2 - Running a feature through the pipeline (/bob-run, standalone) (Priority: P1)
 
-Разработчик описывает фичу текстом и вызывает /bob-run. Specifier превращает описание в Gherkin-спецификации, QA-сценарии и нарезку на срезы поведения; после аппрува человека каждый срез последовательно проходит роли Coder (TDD) → Cleaner (рефакторинг) → Architect (границы/зависимости) → Hardener (mutation-гаунтлет) → QA (исполняемые проверки). Код человеку не показывается; каждая роль коммитит результат перед передачей следующей.
+A developer describes a feature in text and calls /bob-run. The Specifier turns the description into Gherkin specs, QA scenarios, and a cut into behavior slices; after human approval, each slice sequentially passes through the roles Coder (TDD) → Cleaner (refactoring) → Architect (boundaries/dependencies) → Hardener (mutation gauntlet) → QA (executable checks). Code is never shown to the human; each role commits its result before handing off to the next.
 
-**Why this priority**: Основной сценарий использования, ради которого существует плагин.
+**Why this priority**: The main use case the plugin exists for.
 
 **Motivation**:
-- **Problem**: Без конвейера AI пишет код без дисциплины: нет исполняемой спецификации, нет механических гейтов качества, человек вынужден читать и ревьюить код агента, теряя весь выигрыш.
-- **Value**: Человек утверждает только намерение (Gherkin) и получает финальный QA-отчёт; качество кода гарантируется гаунтлетом тестов и метрик, а не глазами.
-- **Consequence if skipped**: Плагин не выполняет свою основную функцию — это ядро продукта.
+- **Problem**: Without a pipeline, AI writes code with no discipline: no executable specification, no mechanical quality gates, and the human is forced to read and review the agent's code, losing the whole benefit.
+- **Value**: The human approves only the intent (Gherkin) and gets a final QA report; code quality is guaranteed by the test and metrics gauntlet, not by eyeballing.
+- **Consequence if skipped**: The plugin fails to perform its core function — this is the product's heart.
 
-**Independent Test**: В инициализированном проекте запустить /bob-run с описанием небольшой фичи, утвердить Gherkin, дождаться финального QA-отчёта и убедиться, что все гейты пройдены, а в истории git есть коммит каждой роли.
+**Independent Test**: In an initialized project, run /bob-run with a description of a small feature, approve the Gherkin, wait for the final QA report, and verify that all gates passed and the git history has a commit from every role.
 
 **Acceptance Scenarios**:
 
-1. **Given** Инициализированный проект и текстовое описание фичи, **When** Разработчик вызывает /bob-run с описанием, **Then** Specifier предъявляет Gherkin-спеки, QA-сценарии и нарезку на срезы на утверждение до начала кодирования
-2. **Given** Утверждённые Gherkin-спеки и нарезка, **When** Конвейер исполняет срез, **Then** Роли проходят последовательно (Coder → Cleaner → Architect → Hardener → QA), каждая роль завершает работу коммитом с меткой роли, прогон идёт в изолированном worktree и не трогает рабочую копию разработчика
-3. **Given** Все срезы прошли гейты, **When** Конвейер завершается, **Then** Разработчик получает финальный QA-отчёт (статусы сценариев, метрики гейтов, ссылки на коммиты ролей) и изменения смержены из worktree в фичевую ветку
-4. **Given** Разработчик отклонил Gherkin-спеки на гейте, **When** Он оставляет замечания, **Then** Specifier перерабатывает спеки с учётом замечаний и предъявляет заново; код не пишется до аппрува
+1. **Given** An initialized project and a text description of a feature, **When** The developer calls /bob-run with the description, **Then** The Specifier presents Gherkin specs, QA scenarios, and a slice breakdown for approval before coding starts
+2. **Given** Approved Gherkin specs and slice breakdown, **When** The pipeline executes a slice, **Then** Roles run sequentially (Coder → Cleaner → Architect → Hardener → QA), each role finishes with a commit tagged with its role, the run happens in an isolated worktree and does not touch the developer's working copy
+3. **Given** All slices passed their gates, **When** The pipeline finishes, **Then** The developer receives a final QA report (scenario statuses, gate metrics, links to role commits) and the changes are merged from the worktree into the feature branch
+4. **Given** The developer rejected the Gherkin specs at the gate, **When** They leave feedback, **Then** The Specifier reworks the specs based on the feedback and resubmits them; no code is written before approval
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` До аппрува Gherkin ни одна строка кода реализации не создаётся
-- [ ] `AC-2` Каждая роль оставляет отдельный коммит перед handoff — по истории git восстановим вклад каждой роли
-- [ ] `AC-3` Прогон идёт в отдельном worktree; рабочая копия разработчика не изменяется до финального merge
-- [ ] `AC-4` Финальный QA-отчёт содержит статус каждого Gherkin-сценария, значения метрик гейтов по срезам и итог прогона
-- [ ] `AC-5` Acceptance-тесты трассируются на Gherkin-сценарии (тег или имя), покрытие сценариев тестами — 100% утверждённых сценариев
+- [ ] `AC-1` Not a single line of implementation code is created before Gherkin approval
+- [ ] `AC-2` Each role leaves a separate commit before handoff — every role's contribution is recoverable from git history
+- [ ] `AC-3` The run happens in a separate worktree; the developer's working copy is unchanged until the final merge
+- [ ] `AC-4` The final QA report contains the status of every Gherkin scenario, gate metric values per slice, and the run's overall outcome
+- [ ] `AC-5` Acceptance tests are traceable to Gherkin scenarios (via tag or name); test coverage of scenarios is 100% of approved scenarios
 
 **Test Scenarios**:
 
 - `TS-1` (e2e)
-  - Given: Инициализированный тестовый проект; Описание фичи из 2–3 сценариев поведения
-  - When: Выполнен полный прогон /bob-run с аппрувом Gherkin
-  - Then: В истории git присутствуют коммиты всех включённых ролей; QA-отчёт выдан, все сценарии зелёные; Рабочая копия до merge не менялась
+  - Given: An initialized test project; A feature description with 2-3 behavior scenarios
+  - When: A full /bob-run pass is executed with Gherkin approval
+  - Then: The git history contains commits from all enabled roles; A QA report is produced, all scenarios green; The working copy was unchanged before the merge
   - Verification: manual
 - `TS-2` (integration)
-  - Given: Gherkin отклонён с замечанием
-  - When: Specifier перерабатывает спеку
-  - Then: Новая версия учитывает замечание; Код до повторного аппрува не создан
+  - Given: Gherkin rejected with feedback
+  - When: The Specifier reworks the spec
+  - Then: The new version addresses the feedback; No code is created before re-approval
   - Verification: manual
 
-### User Story 3 - Интеграция с yamlkit (режим поверх spec-артефактов) (Priority: P2)
+### User Story 3 - Integration with yamlkit (mode on top of spec artifacts) (Priority: P2)
 
-В проекте, где фича уже проведена через yamlkit (spec/plan/tasks), /bob-run автоматически обнаруживает артефакты: спецификация становится входом Specifier'а (Gherkin генерится из неё, а не из свободного текста), нарезка на срезы берётся из tasks, и конвейер исполняет срезы вместо стандартного yamlkit-implement.
+In a project where a feature has already gone through yamlkit (spec/plan/tasks), /bob-run automatically detects the artifacts: the specification becomes the Specifier's input (Gherkin is generated from it instead of free text), the slice breakdown comes from tasks, and the pipeline executes the slices instead of the standard yamlkit-implement.
 
-**Why this priority**: Ценно для существующих yamlkit-проектов пользователя, но standalone-режим самодостаточен.
+**Why this priority**: Valuable for the user's existing yamlkit projects, but the standalone mode is self-sufficient.
 
 **Motivation**:
-- **Problem**: Команды, работающие по spec-driven флоу, уже имеют спецификацию и задачи — заставлять Specifier заново придумывать нарезку значит дублировать работу и плодить расхождения.
-- **Value**: Один источник истины: spec-артефакты порождают Gherkin и срезы, конвейер Боба становится дисциплиной исполнения внутри привычного флоу.
-- **Consequence if skipped**: Два несвязанных флоу в одном проекте: спека отдельно, конвейер отдельно, ручная синхронизация.
+- **Problem**: Teams working a spec-driven flow already have a specification and tasks — making the Specifier reinvent the breakdown means duplicating work and creating divergence.
+- **Value**: One source of truth: spec artifacts produce Gherkin and slices, and Bob's pipeline becomes an execution discipline inside the familiar flow.
+- **Consequence if skipped**: Two unrelated flows in one project: the spec on one side, the pipeline on the other, manual synchronization.
 
-**Independent Test**: В проекте с готовыми spec.yaml/tasks.yaml вызвать /bob-run без описания фичи и убедиться, что Gherkin сгенерён из спеки, а срезы совпадают с задачами.
+**Independent Test**: In a project with ready spec.yaml/tasks.yaml, call /bob-run with no feature description and verify Gherkin is generated from the spec and slices match the tasks.
 
 **Acceptance Scenarios**:
 
-1. **Given** Проект с фичевой директорией yamlkit (spec и tasks присутствуют), **When** Разработчик вызывает /bob-run, **Then** Плагин автоматически определяет режим интеграции, строит Gherkin из спецификации и формирует срезы из задач; свободное описание фичи не запрашивается
-2. **Given** Проект без yamlkit-артефактов, **When** Разработчик вызывает /bob-run с текстовым описанием, **Then** Плагин работает в standalone-режиме без каких-либо требований к наличию yamlkit
-3. **Given** Проект с частичными артефактами (есть спецификация, нет задач), **When** Разработчик вызывает /bob-run, **Then** Gherkin строится из спецификации, а нарезку на срезы выполняет Specifier и предъявляет на том же гейте аппрува
+1. **Given** A project with a yamlkit feature directory (spec and tasks present), **When** The developer calls /bob-run, **Then** The plugin automatically detects integration mode, builds Gherkin from the specification, and forms slices from the tasks; no free-text feature description is requested
+2. **Given** A project with no yamlkit artifacts, **When** The developer calls /bob-run with a text description, **Then** The plugin works in standalone mode with no requirement for yamlkit to be present
+3. **Given** A project with partial artifacts (a specification exists, no tasks), **When** The developer calls /bob-run, **Then** Gherkin is built from the specification, and the Specifier performs the slice breakdown and presents it at the same approval gate
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` Режим (standalone/интеграция) определяется автоматически по наличию артефактов, без флага пользователя
-- [ ] `AC-2` В режиме интеграции каждый Gherkin-сценарий трассируется на требование спецификации, а каждый срез — на задачу
-- [ ] `AC-3` Плагин полностью работоспособен в проекте, где yamlkit не установлен
+- [ ] `AC-1` The mode (standalone/integration) is determined automatically from artifact presence, with no user flag
+- [ ] `AC-2` In integration mode, each Gherkin scenario traces to a specification requirement, and each slice traces to a task
+- [ ] `AC-3` The plugin is fully functional in a project where yamlkit is not installed
 
 **Test Scenarios**:
 
 - `TS-1` (e2e)
-  - Given: Проект с готовыми spec- и tasks-артефактами yamlkit
-  - When: Выполнен /bob-run
-  - Then: Срезы конвейера соответствуют задачам из tasks; Gherkin ссылается на требования спеки
+  - Given: A project with ready yamlkit spec and tasks artifacts
+  - When: /bob-run is executed
+  - Then: Pipeline slices match the tasks; Gherkin references the spec's requirements
   - Verification: manual
 
-### User Story 4 - Пропуск шагов и переопределение конфигурации per-feature (Priority: P2)
+### User Story 4 - Per-feature step skipping and config override (Priority: P2)
 
-Перед запуском фичи разработчик явно указывает, какие роли пропустить («пропусти Hardener и Architect») или какие параметры переопределить; конвейер исполняет только оставшиеся роли, фиксируя отклонение от базового конфига в отчёте.
+Before running a feature, the developer explicitly specifies which roles to skip ("skip Hardener and Architect") or which parameters to override; the pipeline executes only the remaining roles, recording the deviation from the base config in the report.
 
-**Why this priority**: Ключевое требование пользователя, но работает поверх готового конвейера.
+**Why this priority**: A key user requirement, but it operates on top of an already-working pipeline.
 
 **Motivation**:
-- **Problem**: Не каждая фича требует полного гаунтлета: для мелочи mutation-testing и архитектурное ревью — лишние время и токены (сам Боб: «часто я использую только unit-тесты»).
-- **Value**: Гибкая калибровка строгости под критичность задачи одним аргументом, без правки базового конфига.
-- **Consequence if skipped**: Либо полный конвейер всегда (дорого и медленно), либо ручная правка конфига туда-сюда.
+- **Problem**: Not every feature needs the full gauntlet: for small changes, mutation testing and architectural review are extra time and tokens (Bob himself: "often I only use unit tests").
+- **Value**: Flexible calibration of rigor to the task's criticality with a single argument, without editing the base config.
+- **Consequence if skipped**: Either the full pipeline runs always (expensive and slow), or the config is manually edited back and forth.
 
-**Independent Test**: Запустить /bob-run с указанием пропустить две роли и убедиться, что они не исполнялись, а отчёт фиксирует пропуск.
+**Independent Test**: Run /bob-run specifying two roles to skip and verify they didn't execute and the report records the skip.
 
 **Acceptance Scenarios**:
 
-1. **Given** Инициализированный проект, **When** Разработчик вызывает /bob-run с указанием пропустить Hardener, **Then** Роль Hardener не исполняется, её коммитов и гейтов нет, финальный отчёт явно перечисляет пропущенные роли
-2. **Given** Запрос на пропуск обязательной роли (Coder), **When** Разработчик вызывает /bob-run, **Then** Плагин отказывает с объяснением, какие роли неотключаемы (Specifier и Coder), и не запускает прогон
+1. **Given** An initialized project, **When** The developer calls /bob-run specifying to skip Hardener, **Then** The Hardener role does not execute, there are no commits or gates from it, and the final report explicitly lists the skipped roles
+2. **Given** A request to skip a mandatory role (Coder), **When** The developer calls /bob-run, **Then** The plugin refuses, explaining which roles cannot be disabled (Specifier and Coder), and does not start the run
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` Пропущенные роли не исполняются и не потребляют токены
-- [ ] `AC-2` Отчёт прогона содержит список пропущенных ролей и переопределённых параметров
-- [ ] `AC-3` Specifier и Coder пропустить нельзя; попытка отклоняется с объяснением
+- [ ] `AC-1` Skipped roles do not execute and do not consume tokens
+- [ ] `AC-2` The run report lists the skipped roles and overridden parameters
+- [ ] `AC-3` Specifier and Coder cannot be skipped; an attempt is rejected with an explanation
 
 **Test Scenarios**:
 
 - `TS-1` (integration)
-  - Given: Инициализированный проект
-  - When: Выполнен /bob-run с пропуском Hardener и QA
-  - Then: В истории коммитов нет коммитов Hardener/QA; Отчёт перечисляет пропуски
+  - Given: An initialized project
+  - When: /bob-run is executed skipping Hardener and QA
+  - Then: The commit history has no commits from Hardener/QA; The report lists the skips
   - Verification: manual
 
-### User Story 5 - Гейты человека и ночной автономный режим (Priority: P2)
+### User Story 5 - Human gates and night autonomous mode (Priority: P2)
 
-По умолчанию конвейер останавливается дважды: аппрув Gherkin+QA-сценариев до кода и финальный QA-отчёт. Состав гейтов настраивается в конфиге. В ночном режиме конвейер работает без единого интерактивного вопроса: гейты отключены, провалившийся срез помечается и пропускается, утром разработчик получает сводный отчёт по всем срезам.
+By default, the pipeline stops twice: approval of Gherkin+QA scenarios before code, and the final QA report. The set of gates is configurable. In night mode, the pipeline runs with zero interactive questions: gates are disabled, a failing slice is marked and skipped, and in the morning the developer receives a summary report across all slices.
 
-**Why this priority**: Автономность — вторая по важности ценность флоу Боба после гаунтлета.
+**Why this priority**: Autonomy is the second most important value of Bob's flow after the gauntlet.
 
 **Motivation**:
-- **Problem**: Днём нужен контроль намерения, ночью конвейер должен работать автономно — любая интерактивная пауза убивает ночной прогон.
-- **Value**: Максимальная автономность без потери контроля: человек управляет намерением и видит итог, конвейер работает пока разработчик спит.
-- **Consequence if skipped**: Конвейер простаивает ночью или встаёт колом на первом вопросе; либо наоборот — нет контроля намерения днём.
+- **Problem**: During the day, intent control is needed; at night, the pipeline must run autonomously — any interactive pause kills a night run.
+- **Value**: Maximum autonomy without losing control: the human controls intent and sees the outcome, while the pipeline runs while the developer sleeps.
+- **Consequence if skipped**: The pipeline sits idle at night or stalls on the first question; or, conversely, there's no intent control during the day.
 
-**Independent Test**: Запустить прогон в ночном режиме на фиче с заведомо провальным срезом и убедиться, что прогон дошёл до конца без вопросов, а утренний отчёт содержит статусы всех срезов включая провалившийся.
+**Independent Test**: Run a pass in night mode on a feature with a deliberately failing slice and verify the run finishes with no questions and the morning report includes statuses for all slices, including the failed one.
 
 **Acceptance Scenarios**:
 
-1. **Given** Конфиг с гейтами по умолчанию, **When** Идёт обычный прогон, **Then** Конвейер останавливается ровно два раза: аппрув Gherkin до кода и финальный отчёт
-2. **Given** Прогон запущен в ночном режиме, **When** Конвейер исполняет все срезы, **Then** Ни одного интерактивного вопроса не задаётся; Gherkin-гейт заменяется автоаппрувом с пометкой в отчёте
-3. **Given** В ночном прогоне срез исчерпал лимит итераций, **When** Гейт остаётся непройденным, **Then** Срез помечается как провалившийся, его изменения не попадают в merge, конвейер переходит к следующему независимому срезу, утренний отчёт содержит диагноз
+1. **Given** Config with default gates, **When** A normal run is in progress, **Then** The pipeline stops exactly twice: Gherkin approval before code, and the final report
+2. **Given** A run started in night mode, **When** The pipeline executes all slices, **Then** Not a single interactive question is asked; the Gherkin gate is replaced by auto-approval with a note in the report
+3. **Given** In a night run, a slice exhausted its iteration limit, **When** The gate remains unpassed, **Then** The slice is marked failed, its changes don't go into the merge, the pipeline moves to the next independent slice, and the morning report contains the diagnosis
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` Дефолтная конфигурация даёт ровно два гейта: Gherkin-аппрув и финальный отчёт
-- [ ] `AC-2` Ночной режим не задаёт ни одного интерактивного вопроса за весь прогон
-- [ ] `AC-3` Провал среза ночью не валит прогон: срез помечен, независимые срезы исполнены, сводный отчёт выдан
-- [ ] `AC-4` Изменения провалившегося среза не попадают в итоговый merge
+- [ ] `AC-1` The default configuration gives exactly two gates: Gherkin approval and the final report
+- [ ] `AC-2` Night mode asks not a single interactive question during the entire run
+- [ ] `AC-3` A slice failure at night does not crash the run: the slice is marked, independent slices are executed, and a summary report is produced
+- [ ] `AC-4` Changes from a failed slice do not go into the final merge
 
 **Test Scenarios**:
 
 - `TS-1` (e2e)
-  - Given: Фича с двумя независимыми срезами, один из которых заведомо провальный
-  - When: Ночной прогон завершён
-  - Then: Здоровый срез смержен, провальный — нет; Сводный отчёт содержит оба статуса и диагноз провала
+  - Given: A feature with two independent slices, one of which is deliberately failing
+  - When: The night run finishes
+  - Then: The healthy slice is merged, the failing one is not; The summary report contains both statuses and the failure diagnosis
   - Verification: manual
 
-### User Story 6 - Гаунтлет качества: автопочинка, возвраты и пороги (Priority: P1)
+### User Story 6 - Quality gauntlet: auto-fix, send-backs, and thresholds (Priority: P1)
 
-Каждая роль-проверяющий чинит на месте то, что в её компетенции (Hardener сам добивает выживших мутантов тестами, Cleaner сам чистит), а назад по конвейеру возвращает только семантические провалы: упавший QA-сценарий → Coder, забракованная структура → Cleaner/Coder. Возвраты ограничены лимитом итераций; пороги гейтов: mutation score не ниже порога (дефолт 80%), coverage — информационно, сложность/дублирование — не хуже базовой линии.
+Each checking role fixes in place whatever falls within its competence (Hardener finishes off surviving mutants with tests itself, Cleaner cleans up itself), and sends back through the pipeline only semantic failures: a failed QA scenario → Coder, a rejected structure → Cleaner/Coder. Send-backs are limited by an iteration cap; gate thresholds: mutation score no lower than the threshold (default 80%), coverage — informational, complexity/duplication — no worse than the baseline.
 
-**Why this priority**: Гаунтлет — та самая замена код-ревью, ядро методики.
+**Why this priority**: The gauntlet is the very thing replacing code review — the core of the method.
 
 **Motivation**:
-- **Problem**: Без механических гейтов «код никто не читает» превращается в «качество никто не контролирует»; без лимитов агенты бесконечно жуют собственное месиво.
-- **Value**: Качество гарантируется исполняемым гаунтлетом с измеримыми порогами; циклы починки сходятся или честно останавливаются с диагнозом.
-- **Consequence if skipped**: Флоу Боба теряет несущую конструкцию — доверие к коду без ревью человеком не обосновано ничем.
+- **Problem**: Without mechanical gates, "no one reads the code" turns into "no one controls quality"; without limits, agents chew endlessly on their own mess.
+- **Value**: Quality is guaranteed by an executable gauntlet with measurable thresholds; fix cycles either converge or stop honestly with a diagnosis.
+- **Consequence if skipped**: Bob's flow loses its load-bearing structure — trust in code with no human review has no basis.
 
-**Independent Test**: Подсунуть срез со слабыми тестами и убедиться, что Hardener добил mutation score до порога сам; подсунуть срез с неверным поведением и убедиться, что после провала QA работа вернулась Coder'у и цикл ограничен лимитом.
+**Independent Test**: Feed a slice with weak tests and verify Hardener pushed the mutation score up to the threshold itself; feed a slice with incorrect behavior and verify that after a QA failure the work returned to the Coder and the cycle is bounded by the limit.
 
 **Acceptance Scenarios**:
 
-1. **Given** После Coder'а выжили мутанты (score ниже порога), **When** Работает Hardener, **Then** Hardener сам дописывает тесты до достижения порога, не возвращая работу Coder'у
-2. **Given** QA-сценарий упал (поведение неверно), **When** QA фиксирует провал, **Then** Срез возвращается Coder'у с диагнозом; после починки срез повторно проходит последующие роли
-3. **Given** Срез вернулся на починку максимальное число раз (дефолт 3), **When** Гейт снова не пройден, **Then** Конвейер останавливает срез и выдаёт отчёт с диагнозом (в ночном режиме — помечает срез и продолжает)
-4. **Given** Cleaner ухудшил метрику сложности относительно базовой линии, **When** Считается гейт «не хуже базы», **Then** Гейт не пройден, Cleaner дочищает на месте
+1. **Given** After the Coder, mutants survived (score below threshold), **When** The Hardener works, **Then** The Hardener writes additional tests itself until the threshold is reached, without sending work back to the Coder
+2. **Given** A QA scenario failed (behavior is incorrect), **When** QA records the failure, **Then** The slice is sent back to the Coder with a diagnosis; after the fix, the slice goes through the subsequent roles again
+3. **Given** A slice has been sent back for fixing the maximum number of times (default 3), **When** The gate fails again, **Then** The pipeline stops the slice and produces a report with a diagnosis (in night mode — marks the slice and continues)
+4. **Given** The Cleaner made the complexity metric worse relative to the baseline, **When** The "no worse than baseline" gate is computed, **Then** The gate fails, and the Cleaner cleans up further in place
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` Выжившие мутанты устраняются Hardener'ом на месте без возврата по конвейеру
-- [ ] `AC-2` Возврат по конвейеру происходит только при семантических провалах (QA-fail, Architect-fail), маршруты возврата определены в конфиге
-- [ ] `AC-3` Число возвратов на срез ограничено настраиваемым лимитом (дефолт 3); превышение — стоп с диагнозом
-- [ ] `AC-4` Гейты считаются механически: mutation score ≥ порога, сложность/дублирование не хуже базовой линии; coverage выводится информационно и прогон не блокирует
+- [ ] `AC-1` Surviving mutants are eliminated by the Hardener in place, with no pipeline send-back
+- [ ] `AC-2` Pipeline send-back happens only on semantic failures (QA-fail, Architect-fail); send-back routes are defined in the config
+- [ ] `AC-3` The number of send-backs per slice is limited by a configurable cap (default 3); exceeding it stops the run with a diagnosis
+- [ ] `AC-4` Gates are computed mechanically: mutation score ≥ threshold, complexity/duplication no worse than baseline; coverage is reported informationally and does not block the run
 
 **Test Scenarios**:
 
 - `TS-1` (integration)
-  - Given: Срез с тестами, пропускающими мутантов
-  - When: Hardener завершил работу
-  - Then: Mutation score не ниже порога; Возвратов Coder'у не было
+  - Given: A slice with tests that let mutants survive
+  - When: The Hardener finishes its work
+  - Then: Mutation score is no lower than the threshold; There were no send-backs to the Coder
   - Verification: manual
 - `TS-2` (integration)
-  - Given: Срез с неверным поведением, которое Coder не может починить
-  - When: Исчерпан лимит возвратов
-  - Then: Прогон среза остановлен с диагнозом, бесконечного цикла нет
+  - Given: A slice with incorrect behavior that the Coder cannot fix
+  - When: The send-back limit is exhausted
+  - Then: The slice run is stopped with a diagnosis, no infinite loop occurs
   - Verification: manual
 
-### User Story 7 - Параллельные срезы (Priority: P3)
+### User Story 7 - Parallel slices (Priority: P3)
 
-Независимые срезы фичи (без взаимных зависимостей) исполняются одновременно, каждый в собственном worktree-конвейере, с последовательным merge результатов по протоколу; зависимые срезы ждут своих предшественников.
+Independent feature slices (with no mutual dependencies) execute simultaneously, each in its own worktree pipeline, with sequential merging of results per protocol; dependent slices wait for their predecessors.
 
-**Why this priority**: Оптимизация скорости; корректность конвейера от неё не зависит.
+**Why this priority**: A speed optimization; pipeline correctness doesn't depend on it.
 
 **Motivation**:
-- **Problem**: Последовательный прогон длинной фичи из независимых кусков занимает сумму времён всех срезов, хотя срезы не мешают друг другу.
-- **Value**: Время прогона фичи приближается ко времени самого долгого среза, а не суммы всех.
-- **Consequence if skipped**: Ночной прогон может не успеть за ночь; конвейер проигрывает по скорости оригинальной схеме Боба.
+- **Problem**: A sequential run of a long feature made of independent pieces takes the sum of all slice durations, even though the slices don't interfere with each other.
+- **Value**: The feature's run time approaches the duration of the longest slice rather than the sum of all of them.
+- **Consequence if skipped**: A night run may not finish overnight; the pipeline loses on speed to Bob's original scheme.
 
-**Independent Test**: Фича с двумя независимыми срезами: убедиться, что срезы шли одновременно (пересечение интервалов исполнения), оба результата смержены без потерь.
+**Independent Test**: A feature with two independent slices: verify the slices ran simultaneously (overlapping execution intervals), both results merged without loss.
 
 **Acceptance Scenarios**:
 
-1. **Given** Нарезка с независимыми срезами и включённый параллелизм, **When** Запущен прогон, **Then** Независимые срезы исполняются одновременно в отдельных worktree, число одновременных конвейеров ограничено настройкой
-2. **Given** Срез B зависит от среза A, **When** Планируется исполнение, **Then** B не стартует до успешного merge A
-3. **Given** Merge параллельного среза даёт конфликт, **When** Выполняется слияние, **Then** Конфликт разрешается по протоколу слияния; при неразрешимости срез помечается на ручное слияние в отчёте, чужие срезы не страдают
+1. **Given** A breakdown with independent slices and parallelism enabled, **When** A run is started, **Then** Independent slices execute simultaneously in separate worktrees, the number of concurrent pipelines is limited by a setting
+2. **Given** Slice B depends on slice A, **When** Execution is scheduled, **Then** B does not start before A's successful merge
+3. **Given** Merging a parallel slice produces a conflict, **When** The merge is performed, **Then** The conflict is resolved per the merge protocol; if unresolvable, the slice is flagged for manual merge in the report, other slices are unaffected
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` Зависимости между срезами соблюдаются: зависимый срез никогда не стартует раньше успешного завершения предшественника
-- [ ] `AC-2` Число одновременных конвейеров ограничено настраиваемым лимитом
-- [ ] `AC-3` Неразрешимый конфликт слияния не роняет прогон: срез помечается, остальные завершаются
+- [ ] `AC-1` Dependencies between slices are honored: a dependent slice never starts before its predecessor's successful completion
+- [ ] `AC-2` The number of concurrent pipelines is limited by a configurable cap
+- [ ] `AC-3` An unresolvable merge conflict does not crash the run: the slice is flagged, the rest complete
 
 **Test Scenarios**:
 
 - `TS-1` (e2e)
-  - Given: Фича с двумя независимыми срезами
-  - When: Прогон с включённым параллелизмом завершён
-  - Then: Интервалы исполнения срезов пересекаются; Оба среза смержены, результат целостен
+  - Given: A feature with two independent slices
+  - When: A run with parallelism enabled completes
+  - Then: The slices' execution intervals overlap; Both slices are merged, the result is consistent
   - Verification: manual
 
-### User Story 8 - Управление конфигурацией (/bob-config) (Priority: P3)
+### User Story 8 - Configuration management (/bob-config) (Priority: P3)
 
-Разработчик в любой момент вызывает /bob-config, чтобы обсудить и изменить зафиксированные решения: заменить инструмент качества, поменять пороги, модели ролей, состав гейтов или маршруты возвратов; изменения валидируются и применяются к последующим прогонам.
+At any time, the developer calls /bob-config to discuss and change recorded decisions: replace a quality tool, change thresholds, role models, the set of gates, or send-back routes; changes are validated and applied to subsequent runs.
 
-**Why this priority**: Удобство сопровождения; на первый прогон не влияет.
+**Why this priority**: A maintenance convenience; doesn't affect the first run.
 
 **Motivation**:
-- **Problem**: Замороженный на init выбор инструментов и порогов устаревает: выходят новые тулы, меняются требования к строгости.
-- **Value**: Конфигурация живёт и меняется явным управляемым способом, а не ручной правкой YAML наугад.
-- **Consequence if skipped**: Единственный путь изменения — пересоздание конфига через /bob-init или ручная правка без валидации.
+- **Problem**: Tool and threshold choices frozen at init go stale: new tools appear, rigor requirements change.
+- **Value**: The configuration lives and changes in an explicit, managed way, rather than by manually editing YAML at random.
+- **Consequence if skipped**: The only way to change anything is recreating the config via /bob-init or manual editing with no validation.
 
-**Independent Test**: Вызвать /bob-config, заменить mutation-инструмент и порог, убедиться, что следующий прогон использует новые значения.
+**Independent Test**: Call /bob-config, replace the mutation tool and threshold, verify the next run uses the new values.
 
 **Acceptance Scenarios**:
 
-1. **Given** Инициализированный проект, **When** Разработчик вызывает /bob-config и просит заменить mutation-инструмент, **Then** Плагин обсуждает варианты, применяет выбор в конфиг и подтверждает изменение; следующий прогон использует новый инструмент
-2. **Given** Запрошено невалидное изменение (порог вне диапазона, неизвестная роль), **When** Изменение применяется, **Then** Плагин отклоняет изменение с объяснением, конфиг остаётся валидным
+1. **Given** An initialized project, **When** The developer calls /bob-config and asks to replace the mutation tool, **Then** The plugin discusses options, applies the choice to the config, and confirms the change; the next run uses the new tool
+2. **Given** An invalid change is requested (threshold out of range, unknown role), **When** The change is applied, **Then** The plugin rejects the change with an explanation, the config remains valid
 
 **Acceptance Criteria**:
 
-- [ ] `AC-1` Изменения через /bob-config применяются к последующим прогонам без пересоздания конфига
-- [ ] `AC-2` Невалидные изменения отклоняются с объяснением, конфиг никогда не остаётся в невалидном состоянии
+- [ ] `AC-1` Changes made via /bob-config apply to subsequent runs without recreating the config
+- [ ] `AC-2` Invalid changes are rejected with an explanation, the config is never left in an invalid state
 
 **Test Scenarios**:
 
 - `TS-1` (integration)
-  - Given: Проект с конфигом по умолчанию
-  - When: Через /bob-config изменён порог mutation score
-  - Then: Конфиг валиден и содержит новый порог; Следующий прогон применяет новый порог
+  - Given: A project with a default config
+  - When: The mutation score threshold is changed via /bob-config
+  - Then: The config is valid and contains the new threshold; The next run applies the new threshold
   - Verification: manual
 
 
 ## Edge Cases
 
-- `EC-1` Проект без тестовой инфраструктуры (нет тестового фреймворка/проекта) → /bob-init обнаруживает отсутствие и предлагает завести тестовую инфраструктуру как часть инициализации; /bob-run без неё отказывается стартовать с объяснением
-- `EC-2` Для стека нет mutation-инструмента даже после ресёрча → Роль Hardener деградирует до усиления тестов по эвристикам (граничные значения, негативные кейсы) с явной пометкой в конфиге и отчёте, что mutation-гейт недоступен
-- `EC-3` Грязная рабочая копия (незакоммиченные изменения) на момент /bob-run → Прогон стартует, так как работает в отдельном worktree от последнего коммита ветки; пользователь предупреждается, что незакоммиченные изменения в прогон не попадут
-- `EC-4` Проект не является git-репозиторием → /bob-run отказывается стартовать с объяснением (worktree и аудит-трейл требуют git); /bob-init предлагает инициализировать репозиторий
-- `EC-5` Прогон прерван на середине (сессия оборвалась, лимиты, ошибка) → Состояние прогона (текущий срез, роль, итерация) фиксируется в файле состояния внутри worktree; повторный /bob-run обнаруживает незавершённый прогон и предлагает продолжить с последнего коммита роли или отбросить
-- `EC-6` Gherkin-гейт: пользователь не отвечает, а режим не ночной → Конвейер ждёт ответа; никакого таймаут-автоаппрува в дневном режиме нет
-- `EC-7` Базовая линия метрик отсутствует (первый прогон в проекте) → Первый прогон фиксирует базовую линию по состоянию до изменений и оценивает «не хуже базы» относительно неё
-- `EC-8` Переопределение per-feature противоречит конфигу (роль уже выключена глобально, а её просят пропустить) → Прогон идёт, дублирование отмечается в отчёте без ошибки
-- `EC-9` В режиме интеграции yamlkit-артефакты изменились между аппрувом Gherkin и исполнением → Конвейер обнаруживает расхождение по контрольной сумме входных артефактов и требует повторного аппрува затронутых срезов
+- `EC-1` A project with no test infrastructure (no test framework/project) → /bob-init detects the absence and offers to set up test infrastructure as part of initialization; /bob-run refuses to start without it, with an explanation
+- `EC-2` No mutation tool exists for the stack even after research → The Hardener role degrades to strengthening tests via heuristics (boundary values, negative cases), with an explicit note in the config and report that the mutation gate is unavailable
+- `EC-3` A dirty working copy (uncommitted changes) at the time of /bob-run → The run starts anyway, since it works in a separate worktree from the branch's latest commit; the user is warned that uncommitted changes will not be included in the run
+- `EC-4` The project is not a git repository → /bob-run refuses to start with an explanation (worktree and the audit trail require git); /bob-init offers to initialize the repository
+- `EC-5` A run is interrupted midway (session dropped, limits, error) → The run's state (current slice, role, iteration) is recorded in a state file inside the worktree; a subsequent /bob-run detects the unfinished run and offers to resume from the last role commit or discard it
+- `EC-6` Gherkin gate: the user doesn't respond, and the mode is not night mode → The pipeline waits for a response; there is no timeout auto-approval in day mode
+- `EC-7` No metrics baseline exists (first run in the project) → The first run records a baseline from the state before changes and evaluates "no worse than baseline" relative to it
+- `EC-8` A per-feature override conflicts with the config (a role is already disabled globally, and it's requested to be skipped) → The run proceeds, the duplication is noted in the report with no error
+- `EC-9` In integration mode, yamlkit artifacts changed between Gherkin approval and execution → The pipeline detects the divergence via a checksum of the input artifacts and requires re-approval of the affected slices
 
 ## Functional Requirements
 
-- **FR-001**: Плагин MUST предоставлять команду инициализации, которая сканирует проект, определяет технологический стек и через интервью с пользователем создаёт машиночитаемый конфиг конвейера (роли, модели, гейты, пороги, инструменты, режимы). (stories: US1)
-- **FR-002**: Плагин MUST содержать реестр инструментов качества (mutation, coverage, сложность/дублирование) минимум для C#, TypeScript/JavaScript, Python и Java и выбирать инструменты из реестра без обращения в интернет. (stories: US1)
-- **FR-003**: WHEN стек проекта отсутствует в реестре, плагин MUST выполнить поиск подходящих инструментов в интернете, предложить результат пользователю на подтверждение и зафиксировать выбор в конфиге; при отсутствии инструмента категория помечается отключённой с предупреждением. (stories: US1)
-- **FR-004**: Плагин MUST развёртывать шесть ролевых агентов (Specifier, Coder, Cleaner, Architect, Hardener, QA) с промптами, адаптированными под название, домен и стек проекта. (stories: US1, US2)
-- **FR-005**: Команда прогона MUST до начала кодирования предъявить пользователю Gherkin-спецификации, QA-сценарии и нарезку на срезы и ждать явного аппрува (кроме ночного режима); при отклонении Specifier MUST переработать артефакты с учётом замечаний. (stories: US2, US5)
-- **FR-006**: Конвейер MUST исполнять каждый срез последовательностью включённых ролей, где каждая роль стартует субагентом с чистым контекстом и MUST завершать работу git-коммитом с меткой роли перед передачей следующей. (stories: US2)
-- **FR-007**: Прогон фичи MUST исполняться в отдельном git worktree; рабочая копия пользователя не изменяется до финального merge, выполняемого по протоколу слияния. (stories: US2, US7)
-- **FR-008**: Acceptance-тесты MUST трассироваться на Gherkin-сценарии через тег или имя; по умолчанию Gherkin — человекочитаемый документ, а тесты пишутся штатным тест-фреймворком проекта; полноценный BDD-фреймворк подключается опцией конфига. (stories: US2)
-- **FR-009**: WHEN в проекте обнаружены spec-артефакты yamlkit для текущей фичи, плагин MUST автоматически перейти в режим интеграции: Gherkin генерируется из спецификации, срезы берутся из задач; WHEN артефактов нет — работать standalone от текстового описания. (stories: US3)
-- **FR-010**: Плагин MUST принимать при запуске прогона явное перечисление ролей для пропуска и параметров для переопределения; Specifier и Coder MUST быть неотключаемыми; все отклонения от базового конфига MUST фиксироваться в отчёте. (stories: US4)
-- **FR-011**: Модель исполнения каждой роли MUST задаваться в конфиге per-role (дефолт: Specifier/Coder/Cleaner/Architect — sonnet, Hardener/QA — haiku) и передаваться субагенту явно при запуске. (stories: US1, US2)
-- **FR-012**: Плагин MUST поддерживать ночной режим: ни одного интерактивного вопроса за прогон, автоаппрув Gherkin с пометкой, провалившиеся срезы помечаются и пропускаются, по завершении формируется сводный отчёт по всем срезам. (stories: US5)
-- **FR-013**: Роли-проверяющие MUST чинить на месте дефекты своей компетенции (Hardener — добивать выживших мутантов тестами, Cleaner — дочищать метрики); возврат среза назад по конвейеру допускается только при семантических провалах по маршрутам из конфига (дефолт: QA-fail → Coder, Architect-fail → Cleaner/Coder). (stories: US6)
-- **FR-014**: Число возвратов среза MUST ограничиваться настраиваемым лимитом (дефолт 3); при исчерпании конвейер MUST остановить срез с диагнозом (в ночном режиме — пометить и продолжить остальные). (stories: US6, US5)
-- **FR-015**: Гейты качества MUST вычисляться механически из выводов инструментов: mutation score не ниже настраиваемого порога (дефолт 80%), метрики сложности/дублирования не хуже базовой линии; coverage MUST выводиться информационно и не блокировать прогон. (stories: US6)
-- **FR-016**: Финальный QA-отчёт MUST включать статус каждого Gherkin-сценария, значения метрик гейтов по срезам, список пропущенных ролей и переопределений, ссылки на коммиты ролей и итоговый статус прогона. (stories: US2, US4, US5)
-- **FR-017**: WHEN параллелизм включён, независимые срезы MUST исполняться одновременно в отдельных worktree-конвейерах с настраиваемым лимитом одновременности; зависимые срезы MUST ждать успешного merge предшественников; неразрешимый конфликт слияния MUST помечать срез без срыва остальных. (stories: US7)
-- **FR-018**: Плагин MUST предоставлять команду управления конфигурацией, позволяющую обсуждать и менять инструменты, пороги, модели, гейты и маршруты возвратов с валидацией; невалидные изменения MUST отклоняться с объяснением. (stories: US8)
-- **FR-019**: Состояние прогона (срез, роль, итерация) MUST персистироваться; WHEN прогон прерван, повторный запуск MUST предложить продолжение с последнего коммита роли либо отбрасывание прогона. (stories: US2, US5)
-- **FR-020**: Плагин MUST распространяться как единый устанавливаемый пакет плагина Claude Code (команды, агенты, шаблоны, реестр) без ручного копирования файлов получателем. (stories: US1)
+- **FR-001**: The plugin MUST provide an initialization command that scans the project, determines the technology stack, and through an interview with the user creates a machine-readable pipeline config (roles, models, gates, thresholds, tools, modes). (stories: US1)
+- **FR-002**: The plugin MUST contain a registry of quality tools (mutation, coverage, complexity/duplication) for at least C#, TypeScript/JavaScript, Python, and Java, and select tools from the registry without any internet access. (stories: US1)
+- **FR-003**: WHEN the project's stack is absent from the registry, the plugin MUST search the internet for suitable tools, offer the result to the user for confirmation, and record the choice in the config; if no tool is found, the category is marked disabled with a warning. (stories: US1)
+- **FR-004**: The plugin MUST deploy six role agents (Specifier, Coder, Cleaner, Architect, Hardener, QA) with prompts adapted to the project's name, domain, and stack. (stories: US1, US2)
+- **FR-005**: The run command MUST present the user with Gherkin specifications, QA scenarios, and a slice breakdown before coding starts, and wait for explicit approval (except in night mode); on rejection, the Specifier MUST rework the artifacts based on the feedback. (stories: US2, US5)
+- **FR-006**: The pipeline MUST execute each slice through a sequence of enabled roles, where each role starts as a subagent with a clean context and MUST finish its work with a git commit tagged with its role before handing off to the next. (stories: US2)
+- **FR-007**: A feature run MUST execute in a separate git worktree; the user's working copy is not changed until the final merge, performed per the merge protocol. (stories: US2, US7)
+- **FR-008**: Acceptance tests MUST be traceable to Gherkin scenarios via tag or name; by default Gherkin is a human-readable document, and tests are written with the project's standard test framework; a full BDD framework is enabled via a config option. (stories: US2)
+- **FR-009**: WHEN yamlkit spec artifacts for the current feature are detected in the project, the plugin MUST automatically switch to integration mode: Gherkin is generated from the specification, slices come from the tasks; WHEN there are no artifacts — work standalone from a text description. (stories: US3)
+- **FR-010**: The plugin MUST accept, at run start, an explicit list of roles to skip and parameters to override; Specifier and Coder MUST be non-disableable; all deviations from the base config MUST be recorded in the report. (stories: US4)
+- **FR-011**: The execution model for each role MUST be settable in the config per-role (default: Specifier/Coder/Cleaner/Architect — sonnet, Hardener/QA — haiku) and passed explicitly to the subagent at launch. (stories: US1, US2)
+- **FR-012**: The plugin MUST support a night mode: zero interactive questions during the run, auto-approval of Gherkin with a note, failing slices are marked and skipped, and a summary report across all slices is produced at completion. (stories: US5)
+- **FR-013**: Checking roles MUST fix defects within their own competence in place (Hardener — finish off surviving mutants with tests, Cleaner — clean up metrics further); sending a slice back through the pipeline is allowed only on semantic failures via routes from the config (default: QA-fail → Coder, Architect-fail → Cleaner/Coder). (stories: US6)
+- **FR-014**: The number of send-backs per slice MUST be limited by a configurable cap (default 3); when exhausted, the pipeline MUST stop the slice with a diagnosis (in night mode — mark it and continue with the rest). (stories: US6, US5)
+- **FR-015**: Quality gates MUST be computed mechanically from tool output: mutation score no lower than a configurable threshold (default 80%), complexity/duplication metrics no worse than the baseline; coverage MUST be reported informationally and must not block the run. (stories: US6)
+- **FR-016**: The final QA report MUST include the status of every Gherkin scenario, gate metric values per slice, the list of skipped roles and overrides, links to role commits, and the run's overall status. (stories: US2, US4, US5)
+- **FR-017**: WHEN parallelism is enabled, independent slices MUST execute simultaneously in separate worktree pipelines with a configurable concurrency cap; dependent slices MUST wait for their predecessors' successful merge; an unresolvable merge conflict MUST flag the slice without derailing the rest. (stories: US7)
+- **FR-018**: The plugin MUST provide a configuration management command allowing tools, thresholds, models, gates, and send-back routes to be discussed and changed with validation; invalid changes MUST be rejected with an explanation. (stories: US8)
+- **FR-019**: The run state (slice, role, iteration) MUST be persisted; WHEN a run is interrupted, a subsequent invocation MUST offer to resume from the last role commit or discard the run. (stories: US2, US5)
+- **FR-020**: The plugin MUST be distributed as a single installable Claude Code plugin package (commands, agents, templates, registry) requiring no manual file copying by the recipient. (stories: US1)
 
 ## Key Entities
 
-- **PipelineConfig** (`E-1`): Машиночитаемая конфигурация конвейера в проекте: включённые роли, модель per-role, гейты человека, пороги качества, выбранные инструменты, маршруты возвратов, лимиты итераций и параллелизма, режимы (ночной, BDD).
-- **Role** (`E-2`): Одна из шести ролей конвейера (Specifier, Coder, Cleaner, Architect, Hardener, QA): промпт-шаблон, зона ответственности, критерии завершения, модель исполнения.
-- **Slice** (`E-3`): Срез поведения — единица прохода через конвейер: связанная группа Gherkin-сценариев, зависимости от других срезов, статус, счётчик возвратов, ссылки на коммиты ролей.
-- **GherkinSpec** (`E-4`): Человекочитаемая спецификация поведения фичи (сценарии Given/When/Then) с трассировкой на требования исходной спеки (в режиме интеграции) и на acceptance-тесты.
-- **ToolRegistry** (`E-5`): Реестр соответствия «стек → инструменты качества» (mutation, coverage, сложность/дублирование) с командами запуска и способом чтения результатов.
-- **GateResult** (`E-6`): Результат вычисления гейта: метрика, порог/базовая линия, факт прохождения, диагноз при провале.
-- **RunReport** (`E-7`): Итоговый отчёт прогона: статусы срезов и Gherkin-сценариев, метрики гейтов, пропуски и переопределения, ссылки на коммиты, диагнозы провалов.
-- **RunState** (`E-8`): Персистентное состояние незавершённого прогона: текущий срез, роль, итерация, контрольные суммы входных артефактов.
+- **PipelineConfig** (`E-1`): Machine-readable pipeline configuration in the project: enabled roles, per-role model, human gates, quality thresholds, selected tools, send-back routes, iteration and parallelism limits, modes (night, BDD).
+- **Role** (`E-2`): One of the pipeline's six roles (Specifier, Coder, Cleaner, Architect, Hardener, QA): prompt template, area of responsibility, completion criteria, execution model.
+- **Slice** (`E-3`): A behavior slice — a unit of passage through the pipeline: a related group of Gherkin scenarios, dependencies on other slices, status, send-back counter, links to role commits.
+- **GherkinSpec** (`E-4`): A human-readable specification of feature behavior (Given/When/Then scenarios) traceable to the original spec's requirements (in integration mode) and to acceptance tests.
+- **ToolRegistry** (`E-5`): A registry mapping "stack → quality tools" (mutation, coverage, complexity/duplication) with run commands and a way to read the results.
+- **GateResult** (`E-6`): The result of computing a gate: metric, threshold/baseline, pass/fail, diagnosis on failure.
+- **RunReport** (`E-7`): The final run report: slice and Gherkin scenario statuses, gate metrics, skips and overrides, links to commits, failure diagnoses.
+- **RunState** (`E-8`): Persistent state of an unfinished run: current slice, role, iteration, checksums of input artifacts.
 
 ## Success Criteria
 
-- **SC-001**: В проекте на поддерживаемом стеке инициализация от вызова команды до готового конфига занимает одно интервью не длиннее 10 вопросов. (measured via: Прогон /bob-init на эталонных проектах (C#, TS, Python); подсчёт вопросов интервью.)
-- **SC-002**: Фича реализуется конвейером так, что человек взаимодействует только с Gherkin-спеками и финальным отчётом — ни одного показа кода человеку за прогон. (measured via: Аудит транскрипта прогона: перечень всех точек взаимодействия с пользователем.)
-- **SC-003**: Ни один срез с непройденным гейтом не попадает в итоговый merge. (measured via: Тестовые прогоны с заведомо провальными срезами: проверка отсутствия их изменений в итоговой ветке.)
-- **SC-004**: Пропуск ролей per-feature сокращает время и стоимость прогона пропорционально: пропущенные роли не запускаются и не тратят токены. (measured via: Сравнение числа запущенных субагентов и токенов прогона с пропусками и без.)
-- **SC-005**: Ночной прогон фичи из нескольких срезов завершается без единого интерактивного вопроса и к утру даёт сводный отчёт. (measured via: Ночной e2e-прогон на эталонном проекте: проверка отсутствия пауз ожидания ввода и наличия отчёта.)
-- **SC-006**: По истории git любого прогона восстановим вклад каждой роли в каждый срез. (measured via: Проверка истории коммитов эталонного прогона: каждый handoff — отдельный коммит с меткой роли.)
-- **SC-007**: Плагин одинаково работоспособен в проектах с yamlkit и без него. (measured via: Два e2e-прогона: проект с spec-артефактами и чистый проект со свободным описанием.)
-- **SC-008**: Коллега устанавливает плагин и доводит свой проект до первого успешного прогона без помощи автора. (measured via: Полевой тест: установка плагина вторым человеком по README, замер до первого зелёного прогона.)
+- **SC-001**: In a project on a supported stack, initialization from the command call to a ready config takes a single interview of no more than 10 questions. (measured via: Run /bob-init on reference projects (C#, TS, Python); count interview questions.)
+- **SC-002**: A feature is implemented by the pipeline such that the human interacts only with Gherkin specs and the final report — code is never shown to the human during a run. (measured via: Audit of the run transcript: list of all points of user interaction.)
+- **SC-003**: No slice with an unpassed gate ever makes it into the final merge. (measured via: Test runs with deliberately failing slices: verify their changes are absent from the final branch.)
+- **SC-004**: Per-feature role skipping reduces run time and cost proportionally: skipped roles do not run and do not spend tokens. (measured via: Compare the number of subagents run and tokens spent between runs with and without skips.)
+- **SC-005**: A night run of a multi-slice feature completes with not a single interactive question and produces a summary report by morning. (measured via: A night e2e run on a reference project: verify the absence of input-wait pauses and the presence of a report.)
+- **SC-006**: Every role's contribution to every slice is recoverable from the git history of any run. (measured via: Check the commit history of a reference run: each handoff is a separate commit tagged with a role.)
+- **SC-007**: The plugin works equally well in projects with and without yamlkit. (measured via: Two e2e runs: a project with spec artifacts and a clean project with a free-text description.)
+- **SC-008**: A colleague installs the plugin and brings their project to its first successful run without the author's help. (measured via: Field test: a second person installs the plugin following the README, time to first green run is measured.)
 
 ## Assumptions
 
-- `A-1` Плагин исполняется в Claude Code с доступом к субагентам (Agent tool), git и файловой системе проекта.
-- `A-2` Проект пользователя ведётся в git или пользователь согласен его инициализировать.
-- `A-3` Модели уровня sonnet и haiku доступны в сессии пользователя; при недоступности роль наследует модель сессии.
-- `A-4` Референс флоу — публичные материалы Uncle Bob о SwarmForge (6 ролей, гаунтлет вместо ревью, «код агентов не читаю»); буквальная совместимость с SwarmForge (tmux) не требуется.
-- `A-5` Паттерны model-tiered-team-kit (шаблоны агентов с плейсхолдерами, worktree-merge протокол, per-role память) доступны как референс при реализации.
-- `A-6` Интервью /bob-init и обсуждения /bob-config ведутся на языке пользователя; артефакты конвейера (Gherkin, отчёты) — на языке, выбранном в конфиге.
+- `A-1` The plugin runs inside Claude Code with access to subagents (Agent tool), git, and the project's file system.
+- `A-2` The user's project is under git, or the user agrees to initialize it.
+- `A-3` Sonnet- and haiku-tier models are available in the user's session; if unavailable, a role falls back to the session's model.
+- `A-4` The reference flow is Uncle Bob's public material on SwarmForge (6 roles, gauntlet instead of review, "I don't read the agents' code"); literal compatibility with SwarmForge (tmux) is not required.
+- `A-5` Patterns from model-tiered-team-kit (agent templates with placeholders, the worktree-merge protocol, per-role memory) are available as a reference during implementation.
+- `A-6` The /bob-init interview and /bob-config discussions are conducted in the user's language; pipeline artifacts (Gherkin, reports) are in the language selected in the config.

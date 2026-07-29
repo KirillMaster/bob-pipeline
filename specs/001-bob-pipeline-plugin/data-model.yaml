@@ -1,0 +1,303 @@
+feature: "001-bob-pipeline-plugin"
+entities:
+  - id: "pipeline-config"
+    name: "PipelineConfig"
+    description: "Project pipeline configuration (.claude/bob-pipeline.yaml): role composition, models, gates, thresholds, tools, modes. Created by the /bob-init interview, changed via /bob-config, overridable per feature."
+    fields:
+      - name: "version"
+        type: "string"
+        required: true
+        description: "Config format version, for migrations."
+      - name: "stack"
+        type: "string"
+        required: true
+        description: "Detected/confirmed technology stack of the project (e.g. csharp, typescript, python, java)."
+      - name: "roles"
+        type: "array"
+        required: true
+        description: "Ordered list of pipeline roles with their settings (items are Role)."
+      - name: "tools"
+        type: "array"
+        required: true
+        description: "Frozen selection of quality tools per category (items are ToolRegistryEntry, copied from the registry or found via research)."
+      - name: "human_gates"
+        type: "object"
+        required: true
+        description: "Human gate configuration: Gherkin+QA-procedure approval before code (bool), final QA report (bool). Default — both enabled (as Bob does it)."
+      - name: "thresholds"
+        type: "object"
+        required: true
+        description: "Gate thresholds: mutation_score_min (default 80), coverage policy (informational), complexity/duplication policy (not-worse-than-baseline)."
+      - name: "return_limit"
+        type: "number"
+        required: true
+        description: "Send-back iteration limit per slice (default 3)."
+      - name: "parallel_limit"
+        type: "number"
+        required: true
+        description: "Maximum concurrent worktree pipelines over independent slices (default 3)."
+      - name: "bdd_framework"
+        type: "string"
+        required: false
+        description: "Optional BDD framework (reqnroll/cucumber-js/behave); absence = Gherkin document + tag traceability."
+      - name: "night_mode_default"
+        type: "boolean"
+        required: true
+        description: "Default night mode for runs (normally false; enabled per run with the --night flag)."
+    relationships:
+      - field: "roles"
+        target_entity_ref: "role"
+        cardinality: "many"
+      - field: "tools"
+        target_entity_ref: "tool-registry-entry"
+        cardinality: "many"
+
+  - id: "role"
+    name: "Role"
+    description: "A pipeline role (Specifier, Coder, Cleaner, Architect, Hardener, QA): a clean-context subagent with an explicit model and a mandatory commit before handoff."
+    fields:
+      - name: "name"
+        type: "enum"
+        required: true
+        enum_values: ["specifier", "coder", "cleaner", "architect", "hardener", "qa"]
+        description: "Role name from the fixed set of Uncle Bob's pipeline."
+      - name: "model"
+        type: "string"
+        required: true
+        description: "Subagent model, passed as an explicit parameter at spawn (defaults: sonnet for specifier/coder/cleaner/architect, haiku for hardener/qa)."
+      - name: "enabled"
+        type: "boolean"
+        required: true
+        description: "Whether the role is part of the pipeline by default; a per-feature override may skip an enabled role."
+      - name: "gates"
+        type: "array"
+        required: true
+        description: "Names of quality gates the role must pass before handoff (e.g. mutation-score, tests-green, complexity-baseline)."
+      - name: "degradation"
+        type: "string"
+        required: false
+        description: "Behavior when the category's tool is unavailable (e.g. hardener → heuristic test strengthening without a mutation tool)."
+    relationships: []
+
+  - id: "slice"
+    name: "Slice"
+    description: "A vertical slice of the feature — the unit that travels through the pipeline. Source: tasks.md (yamlkit mode) or the Specifier's breakdown (standalone). Approved together with the Gherkin."
+    fields:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "Stable slice identifier (e.g. S1)."
+      - name: "title"
+        type: "string"
+        required: true
+        description: "Human-readable slice title."
+      - name: "depends_on"
+        type: "array"
+        required: true
+        description: "Identifiers of predecessor slices; an empty array = independent slice, candidate for a parallel run."
+      - name: "scenario_refs"
+        type: "array"
+        required: true
+        description: "Identifiers of Gherkin scenarios the slice implements (slice → intent traceability)."
+      - name: "status"
+        type: "enum"
+        required: true
+        enum_values: ["pending", "running", "passed", "failed", "skipped", "merged"]
+        description: "Current state of the slice within the run."
+      - name: "return_count"
+        type: "number"
+        required: true
+        description: "How many pipeline send-backs have been spent (gate: <= return_limit)."
+      - name: "worktree_path"
+        type: "string"
+        required: false
+        description: "Path of the worktree the slice runs in (set at start)."
+      - name: "skipped_roles"
+        type: "array"
+        required: true
+        description: "Roles skipped for this slice by a per-feature override; recorded in the report."
+    relationships:
+      - field: "depends_on"
+        target_entity_ref: "slice"
+        cardinality: "many"
+      - field: "scenario_refs"
+        target_entity_ref: "gherkin-spec"
+        cardinality: "many"
+
+  - id: "gherkin-spec"
+    name: "GherkinSpec"
+    description: "The human-approved intent contract: a .feature document with scenarios + QA procedures. The only thing the human reviews before code (P2)."
+    fields:
+      - name: "scenario_id"
+        type: "string"
+        required: true
+        description: "Stable scenario identifier (e.g. US2-AS1) — the test traceability key."
+      - name: "feature_file"
+        type: "string"
+        required: true
+        description: "Path to the .feature document in .bob/features/ inside the worktree."
+      - name: "gherkin_text"
+        type: "string"
+        required: true
+        description: "The Given/When/Then scenario text."
+      - name: "qa_procedure"
+        type: "string"
+        required: true
+        description: "Executable QA check for the scenario (steps the QA role runs, attaching the output)."
+      - name: "approval"
+        type: "enum"
+        required: true
+        enum_values: ["pending", "approved", "auto-approved-night", "rejected"]
+        description: "Human approval status; auto-approved-night is flagged separately in the report."
+      - name: "checksum"
+        type: "string"
+        required: true
+        description: "Checksum of the approved text; any change after approval requires re-approval (EC-9)."
+    relationships: []
+
+  - id: "tool-registry-entry"
+    name: "ToolRegistryEntry"
+    description: "A quality tool registry entry: how to run the tool and parse its report for a given stack and category."
+    fields:
+      - name: "stack"
+        type: "string"
+        required: true
+        description: "Stack the entry applies to (csharp, typescript, python, java; any for language-agnostic tools)."
+      - name: "category"
+        type: "enum"
+        required: true
+        enum_values: ["mutation", "coverage", "complexity", "duplication"]
+        description: "Quality category the tool covers."
+      - name: "tool"
+        type: "string"
+        required: true
+        description: "Tool name (Stryker.NET, StrykerJS, mutmut, PIT, lizard, jscpd, ...)."
+      - name: "run_command"
+        type: "string"
+        required: true
+        description: "Command to run the tool inside the worktree."
+      - name: "report_parser"
+        type: "string"
+        required: true
+        description: "Script/method that extracts the metric from the tool's report (path under scripts/)."
+      - name: "enabled"
+        type: "boolean"
+        required: true
+        description: "false = the category is unavailable for the stack; the related role degrades explicitly, with a warning in the report (EC-2)."
+    relationships: []
+
+  - id: "gate-result"
+    name: "GateResult"
+    description: "The result of a single mechanical quality gate: a metric from tool output checked against a threshold or baseline."
+    fields:
+      - name: "gate"
+        type: "string"
+        required: true
+        description: "Gate name (mutation-score, tests-green, complexity-baseline, duplication-baseline, gherkin-traceability)."
+      - name: "role"
+        type: "enum"
+        required: true
+        enum_values: ["specifier", "coder", "cleaner", "architect", "hardener", "qa"]
+        description: "Role at whose handoff the gate was computed."
+      - name: "metric_value"
+        type: "number"
+        required: false
+        description: "Numeric metric value (absent for binary gates such as tests-green)."
+      - name: "threshold"
+        type: "number"
+        required: false
+        description: "Gate threshold, when the gate is threshold-based (mutation >= 80)."
+      - name: "baseline"
+        type: "number"
+        required: false
+        description: "Baseline, when the gate is of the not-worse-than-baseline kind (complexity/duplication)."
+      - name: "passed"
+        type: "boolean"
+        required: true
+        description: "Gate verdict computed by a script from tool output (P1)."
+      - name: "diagnosis"
+        type: "string"
+        required: false
+        description: "Failure diagnosis: what exactly failed and what action was taken (in-place fix / send-back / marked failed)."
+    relationships: []
+
+  - id: "run-state"
+    name: "RunState"
+    description: "Persistent run state (.bob/state.yaml inside the worktree) for detecting and resuming an interrupted run (EC-5)."
+    fields:
+      - name: "run_id"
+        type: "string"
+        required: true
+        description: "Run identifier (feature + launch stamp)."
+      - name: "feature"
+        type: "string"
+        required: true
+        description: "Name of the feature the run is for."
+      - name: "mode"
+        type: "enum"
+        required: true
+        enum_values: ["day", "night"]
+        description: "Run mode: day (with human gates) or night (auto-approval, no questions)."
+      - name: "current_slice"
+        type: "id_ref"
+        required: false
+        description: "Slice currently executing (empty between slices)."
+      - name: "current_role"
+        type: "string"
+        required: false
+        description: "Role currently executing within the current slice."
+      - name: "input_checksums"
+        type: "object"
+        required: true
+        description: "Checksums of input artifacts (spec/tasks/Gherkin) at approval time; a mismatch on resume requires re-approval (EC-9)."
+      - name: "baselines"
+        type: "object"
+        required: true
+        description: "Metric baselines (complexity/duplication) at run start; the first baseline is captured on the first run (EC-7)."
+      - name: "slices"
+        type: "array"
+        required: true
+        description: "Snapshot of all slice states in the run (items are Slice)."
+    relationships:
+      - field: "current_slice"
+        target_entity_ref: "slice"
+        cardinality: "one"
+      - field: "slices"
+        target_entity_ref: "slice"
+        cardinality: "many"
+
+  - id: "run-report"
+    name: "RunReport"
+    description: "The final run report for the human: the fate of every slice, gates, skips, degradations, overrides — honest reporting (P7). A night run delivers it in the morning."
+    fields:
+      - name: "run_id"
+        type: "string"
+        required: true
+        description: "Identifier of the run the report belongs to."
+      - name: "summary"
+        type: "string"
+        required: true
+        description: "Summary: how many slices passed/failed/skipped, what was merged."
+      - name: "slice_results"
+        type: "array"
+        required: true
+        description: "Per-slice results (references to Slice) with their gates."
+      - name: "gate_results"
+        type: "array"
+        required: true
+        description: "All gates computed during the run (items are GateResult) with failure diagnoses."
+      - name: "deviations"
+        type: "array"
+        required: true
+        description: "Recorded deviations: role skips, category degradations, night-mode auto-approvals, exhausted send-back limits."
+      - name: "merged"
+        type: "boolean"
+        required: true
+        description: "Whether the passing slices were merged into the user's branch."
+    relationships:
+      - field: "slice_results"
+        target_entity_ref: "slice"
+        cardinality: "many"
+      - field: "gate_results"
+        target_entity_ref: "gate-result"
+        cardinality: "many"

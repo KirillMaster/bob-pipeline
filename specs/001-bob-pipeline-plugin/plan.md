@@ -1,0 +1,52 @@
+<!-- GENERATED FILE — DO NOT EDIT BY HAND.
+     This file is rendered from the corresponding .yaml artifact and will be
+     overwritten the next time it is regenerated. Edit the .yaml source instead. -->
+
+# Implementation Plan: bob-pipeline — Claude Code plugin: development pipeline following Uncle Bob's AI flow
+
+**Branch**: `001-bob-pipeline-plugin`
+
+## Summary
+
+Claude Code plugin (commands + agents + templates + tool registry): /bob-init, /bob-run, /bob-config commands; six roles as clean-context subagents with an explicit per-role model; .claude/bob-pipeline.yaml config; execution inside a git worktree with a role commit before every handoff; quality gauntlet driven by stack-specific tools from the registry.
+
+## Technical Context
+
+- **Language/Version**: Markdown/YAML (Claude Code plugin artifacts: commands, agents, templates) + Python 3.12+ for helper scripts (config validation, tool report parsing)
+- **Primary Dependencies**: Claude Code plugin system (plugin.json, commands/, agents/, skills/), Agent tool (subagents with per-role model), git (worktree, role commits, merge protocol), Quality tools from the registry: Stryker.NET+coverlet (C#), StrykerJS (TS/JS), mutmut+coverage (Python), PIT (Java)
+- **Storage**: Project filesystem: .claude/bob-pipeline.yaml (config), .bob/ inside the worktree (run state, reports, metric baselines)
+- **Testing**: Reference mini-projects (C#, TS, Python) in tests/fixtures + e2e pipeline runs following quickstart scenarios; pytest for the Python scripts
+- **Target Platform**: Claude Code CLI (Windows/macOS/Linux), user projects on any stack
+- **Project Type**: single_project
+- **Performance Goals**: A slice run without waiting on a human is bounded by role work; parallel independent slices ~ duration of the longest slice; a skipped role costs 0 tokens
+- **Constraints**: No external services or API keys; everything local (git, files, subagents); the plugin must not require yamlkit; interactive questions are forbidden in night mode
+- **Scale/Scope**: One run: a feature of up to ~10 slices, up to 6 roles per slice, configurable parallelism limit (default 3); the plugin is meant to be shared with a team
+
+## Constitution Check
+
+| Principle | Status | Justification |
+|---|---|---|
+| `P1` | pass | — |
+| `P2` | pass | — |
+| `P3` | pass | — |
+| `P4` | pass | — |
+| `P5` | pass | — |
+| `P6` | pass | — |
+| `P7` | pass | — |
+
+## Project Structure
+
+**Layout**: single_project
+
+Standard Claude Code plugin structure: manifest, commands as markdown prompts, role agents as templates with placeholders, tool registry and config template as data, helper python scripts, reference projects for e2e.
+
+**Directories**:
+
+- `.claude-plugin/ (plugin.json — plugin manifest)`
+- `commands/ (bob-init.md, bob-run.md, bob-config.md)`
+- `agents/ (specifier.md, coder.md, cleaner.md, architect.md, hardener.md, qa.md — templates with placeholders)`
+- `templates/ (bob-pipeline.yaml config template, gherkin template, reports, worktree-merge protocol)`
+- `registry/ (tool-registry.yaml — stack → tools)`
+- `scripts/ (config validation, mutation/coverage/metric report parsing, gate computation)`
+- `tests/ (fixtures/ reference mini-projects; e2e scenarios per quickstart)`
+- `docs/ (README for colleagues: installation, first run)`

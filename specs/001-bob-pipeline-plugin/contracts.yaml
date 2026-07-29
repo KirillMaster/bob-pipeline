@@ -1,0 +1,175 @@
+feature: "001-bob-pipeline-plugin"
+contracts:
+  - id: "cmd-bob-init"
+    name: "/bob-init — initialize the pipeline in a project"
+    kind: "interface"
+    request:
+      - name: "answers"
+        type: "object"
+        required: false
+        description: "Interview answers (roles, models, gates, thresholds, BDD option); when absent, the command asks interactively."
+      - name: "stack_override"
+        type: "string"
+        required: false
+        description: "Explicit stack instead of auto-detection from project markers."
+    response_cases:
+      - outcome: "initialized"
+        fields:
+          - name: "config_path"
+            type: "string"
+            required: true
+            description: "Path of the created .claude/bob-pipeline.yaml."
+          - name: "stack"
+            type: "string"
+            required: true
+            description: "Detected/confirmed stack."
+          - name: "tools_selected"
+            type: "array"
+            required: true
+            description: "Tools selected from the registry per category (ToolRegistryEntry records)."
+          - name: "warnings"
+            type: "array"
+            required: true
+            description: "Warnings: categories without a tool (enabled: false), missing test infrastructure."
+      - outcome: "already-initialized"
+        fields:
+          - name: "config_path"
+            type: "string"
+            required: true
+            description: "Path of the existing config; the command suggests /bob-config instead of overwriting."
+      - outcome: "not-a-git-repo"
+        fields:
+          - name: "message"
+            type: "string"
+            required: true
+            description: "EC-4 diagnosis: the project is not under git, the pipeline requires git (worktrees, role commits); suggests git init."
+      - outcome: "unknown-stack-research"
+        fields:
+          - name: "candidates"
+            type: "array"
+            required: true
+            description: "Tool candidates from web research for a stack outside the registry; user confirmation is required before freezing into the config."
+    entity_refs:
+      - "pipeline-config"
+      - "tool-registry-entry"
+
+  - id: "cmd-bob-run"
+    name: "/bob-run — run a feature through the pipeline"
+    kind: "interface"
+    request:
+      - name: "feature_description"
+        type: "string"
+        required: false
+        description: "Feature description (standalone mode); not required when yamlkit artifacts (spec/tasks) are detected — they become the Specifier's input."
+      - name: "skip_roles"
+        type: "array"
+        required: false
+        description: "Per-feature role skip ('skip Hardener'); recorded in the report as a deviation."
+      - name: "night"
+        type: "boolean"
+        required: false
+        description: "Night mode: auto-approve Gherkin with a flag in the report, zero interactive questions, a failed slice is skipped."
+      - name: "resume"
+        type: "boolean"
+        required: false
+        description: "Resume an interrupted run from RunState, starting at the last role commit."
+    response_cases:
+      - outcome: "awaiting-approval"
+        fields:
+          - name: "features"
+            type: "array"
+            required: true
+            description: "Gherkin scenarios + QA procedures + slice breakdown presented to the human for approval (day mode, P2 gate)."
+      - outcome: "completed"
+        fields:
+          - name: "report"
+            type: "object"
+            required: true
+            description: "Final RunReport: all slices passed, merge performed."
+      - outcome: "completed-with-failures"
+        fields:
+          - name: "report"
+            type: "object"
+            required: true
+            description: "RunReport: some slices failed/skipped with diagnoses; only passing slices merged (P4)."
+      - outcome: "rejected"
+        fields:
+          - name: "message"
+            type: "string"
+            required: true
+            description: "The human rejected the Gherkin/breakdown; the run stops before any code, the worktree is not created or is removed."
+      - outcome: "interrupted-run-found"
+        fields:
+          - name: "state"
+            type: "object"
+            required: true
+            description: "RunState of an interrupted run found (EC-5): slice/role/iteration; resume or discard offered."
+      - outcome: "stale-approval"
+        fields:
+          - name: "changed_artifacts"
+            type: "array"
+            required: true
+            description: "Input artifact checksums diverged from the approved ones (EC-9); re-approval required."
+      - outcome: "no-test-infra"
+        fields:
+          - name: "message"
+            type: "string"
+            required: true
+            description: "EC-1 diagnosis: no test infrastructure; offer to set it up (Coder can create it per config) or stop."
+      - outcome: "dirty-working-copy"
+        fields:
+          - name: "message"
+            type: "string"
+            required: true
+            description: "EC-3 diagnosis: uncommitted changes prevent creating a worktree from an up-to-date base; suggests commit/stash."
+      - outcome: "not-initialized"
+        fields:
+          - name: "message"
+            type: "string"
+            required: true
+            description: ".claude/bob-pipeline.yaml not found; suggests running /bob-init."
+    entity_refs:
+      - "pipeline-config"
+      - "slice"
+      - "gherkin-spec"
+      - "gate-result"
+      - "run-state"
+      - "run-report"
+
+  - id: "cmd-bob-config"
+    name: "/bob-config — view and change the configuration"
+    kind: "interface"
+    request:
+      - name: "changes"
+        type: "object"
+        required: false
+        description: "Requested changes (role model, threshold, category tool, BDD option, limits); when absent, the command shows the current config."
+    response_cases:
+      - outcome: "shown"
+        fields:
+          - name: "config"
+            type: "object"
+            required: true
+            description: "Current PipelineConfig in human-readable form: roles, models, gates, tools, thresholds, limits."
+      - outcome: "updated"
+        fields:
+          - name: "diff"
+            type: "array"
+            required: true
+            description: "List of applied changes (field: old → new); the config is rewritten and valid."
+      - outcome: "invalid-change"
+        fields:
+          - name: "violations"
+            type: "array"
+            required: true
+            description: "Rejected changes with reasons (unknown role, threshold out of range, tool not in the registry without confirmed research)."
+      - outcome: "not-initialized"
+        fields:
+          - name: "message"
+            type: "string"
+            required: true
+            description: "Config not found; suggests running /bob-init."
+    entity_refs:
+      - "pipeline-config"
+      - "role"
+      - "tool-registry-entry"
