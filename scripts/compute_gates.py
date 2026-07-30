@@ -53,12 +53,16 @@ def metric_for(metrics, category):
     return None
 
 
-def compute(config, role_name, metrics, baselines, tests_exit, traceability):
+def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None):
     role = next((r for r in config["roles"] if r["name"] == role_name), None)
     if role is None:
         raise SystemExit(f"unknown role '{role_name}'")
     thresholds = config["thresholds"]
-    enabled_cats = {t["category"] for t in config["tools"] if t["enabled"]}
+    stack = stack or config.get("stack")
+    enabled_cats = {
+        t["category"] for t in config["tools"]
+        if t["enabled"] and t.get("stack") in (stack, "any")
+    }
     results = []
 
     for gate in role["gates"]:
@@ -125,6 +129,13 @@ def main():
     ap.add_argument("--baselines")
     ap.add_argument("--tests-exit", type=int, default=None)
     ap.add_argument("--traceability")
+    ap.add_argument("--stack", default=None,
+                     help="stack of the slice being gated (e.g. csharp, python); "
+                          "defaults to config's top-level stack. Scopes which tools/ "
+                          "entries count as 'enabled' for this gate computation — a "
+                          "multi-stack project's tools list is not otherwise filtered "
+                          "per-role, which previously let one stack's enabled tool "
+                          "force a gate for another stack with no tool configured.")
     args = ap.parse_args()
 
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8-sig"))
@@ -135,6 +146,7 @@ def main():
         load_json_arg(args.baselines),
         args.tests_exit,
         load_json_arg(args.traceability),
+        args.stack,
     )
     json.dump(results, sys.stdout, indent=2)
     print()
