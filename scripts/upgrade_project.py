@@ -3,7 +3,8 @@
 
 Usage:
     python scripts/upgrade_project.py --project <dir> [--plugin-root <dir>] [--dry-run]
-        [--steps config,agents,support,untrack] [--old-ref <git-ref> ...] [--prefer-new]
+        [--steps config,agents,support,untrack,qg] [--old-ref <git-ref> ...] [--prefer-new]
+        [--qg-version <x.y.z>]
 
 Steps (default: all):
     config   migrate .claude/bob-pipeline.yaml: cleaner -> architect (gates merged, routes
@@ -22,12 +23,20 @@ Steps (default: all):
     untrack  OPT-IN (not in the default steps): `git rm -r --cached` the bob files when they are
              tracked in the project repo. Files stay on disk; nothing is committed — the caller
              commits the removal.
+    qg       OPT-IN (not in the default steps), design D20-D23: quality gates. Config: add the
+             quality_gates / mutation / parallel sections, the registry's lint/format/architecture
+             (stack, C# only when net8+ projects exist) and diff-coverage/constitution-traceability
+             tools, and the QG gates to the coder/architect/hardener roles (old file kept as
+             bob-pipeline.yaml.bak-pre-1.3). C# net8+ (net4x skipped): Directory.Build.props wiring
+             of the Build package, an arch test project skeleton, and constitution principles.
+             Package ids are chosen by the git remote (tenengroup vs pet).
 
 Output: JSON report on stdout. Exit 0 ok; 1 when agent merges left conflicts; 2 usage error.
 """
 import argparse
 import difflib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -40,7 +49,30 @@ import yaml
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OLD_REFS = ["v1.2.0", "v1.1.0", "3456188", "v1.0.0", "d7caca1"]
 DEFAULT_STEPS = "config,agents,support"
-ALL_STEPS = {"config", "agents", "support", "untrack"}
+ALL_STEPS = {"config", "agents", "support", "untrack", "qg"}
+QG_VERSION = "0.1.0"
+QG_PACKAGES = {
+    "pet": {"build": "KirillMaster.QualityGates.Build", "arch": "KirillMaster.QualityGates.Architecture"},
+    "tenengroup": {"build": "TenenGroup.QualityGates.Build", "arch": "TenenGroup.QualityGates"},
+}
+QG_MARKER = "bob-pipeline quality gates"
+QG_STACK_CATEGORIES = ["lint", "format", "architecture"]
+QG_ANY_CATEGORIES = ["diff-coverage", "constitution-traceability"]
+QG_ROLE_GATES = {
+    "coder": ["lint", "format", "architecture"],
+    "architect": ["lint", "format", "architecture"],
+    "hardener": ["hardening-findings"],
+}
+QG_PRINCIPLES = [
+    ("Warnings are errors", "The solution builds with warnings-as-errors and analyzers enabled; analyzer findings are never suppressed to pass.",
+     "`dotnet build -warnaserror` exits 0 (bob quality gate: lint)."),
+    ("Code is formatted", "All code conforms to the repository formatting rules.",
+     "`dotnet format --verify-no-changes` exits 0 (bob quality gate: format)."),
+    ("Architecture rules hold", "Layer and dependency rules are enforced by architecture tests.",
+     "`dotnet test --filter Category=Architecture` is green (bob quality gate: architecture)."),
+    ("New code is covered", "Lines changed by a slice have at least 80% coverage.",
+     "diff-cover on the merge-gate coverage run reports >= 80% (bob quality gate: diff-coverage)."),
+]
 # bob-owned local tooling, never tracked in the project repo (design D15)
 BOB_PATHS = [".claude/bob-pipeline.yaml", ".claude/bob-pipeline.yaml.bak-pre-1.2", ".claude/agents/bob/", ".bob/", ".worktrees/"]
 EXCLUDE_HEADER = "# bob-pipeline local files"
@@ -391,7 +423,211 @@ def fallback_values(config, role):
 
 # ── driver ───────────────────────────────────────────────────────────
 
-def run(project, plugin_root, dry_run, steps, old_refs, prefer_new=False):
+# ── qg: quality gates (D20-D23) ──────────────────────────────────────
+
+def remote_flavor(project):
+    r = subprocess.run(["git", "-C", str(project), "remote", "get-url", "origin"],
+                       capture_output=True, text=True, encoding="utf-8")
+    return "tenengroup" if r.returncode == 0 and "tenengroup" in r.stdout.lower() else "pet"
+
+
+def classify_tfm(tfm):
+    """modern = net8.0+; legacy = .NET Framework (net4x); other = netstandard/netcoreapp/older net."""
+    tfm = tfm.strip().lower()
+    if re.fullmatch(r"net4\d+", tfm):
+        return "legacy"
+    m = re.match(r"net(\d+)\.\d+", tfm)
+    if m:
+        return "modern" if int(m.group(1)) >= 8 else "other"
+    return "other"
+
+
+def scan_csharp_projects(project):
+    """-> {"modern": [{path, tfm}], "legacy": [path], "other": [path]}; paths relative to project."""
+    out = {"modern": [], "legacy": [], "other": []}
+    for f in sorted(project.rglob("*.csproj")):
+        if SKIP_DIRS & set(f.relative_to(project).parts):
+            continue
+        text = f.read_text(encoding="utf-8-sig", errors="replace")
+        tfms = re.findall(r"<TargetFrameworks?>([^<]+)</TargetFrameworks?>", text)
+        tfms = [t.strip() for v in tfms for t in v.split(";") if t.strip()]
+        rel = f.relative_to(project).as_posix()
+        kinds = {classify_tfm(t) for t in tfms}
+        if "modern" in kinds and "legacy" not in kinds:
+            top = max((t for t in tfms if classify_tfm(t) == "modern"), key=lambda t: int(re.match(r"net(\d+)", t.lower()).group(1)))
+            out["modern"].append({"path": rel, "tfm": top, "is_test": "<IsTestProject>true" in text or "Microsoft.NET.Test.Sdk" in text})
+        elif "legacy" in kinds:
+            out["legacy"].append(rel)
+        else:
+            out["other"].append(rel)
+    return out
+
+
+def props_block(build_pkg, version):
+    return (f"  <!-- {QG_MARKER} -->\n"
+            "  <ItemGroup Condition=\"'$(TargetFrameworkIdentifier)' == '.NETCoreApp' And "
+            "$([MSBuild]::VersionGreaterThanOrEquals('$(TargetFrameworkVersion.TrimStart(`v`))', '8.0'))\">\n"
+            f"    <PackageReference Include=\"{build_pkg}\" Version=\"{version}\" PrivateAssets=\"all\" />\n"
+            "  </ItemGroup>\n")
+
+
+def wire_directory_build_props(project, build_pkg, version, dry_run):
+    path = project / "Directory.Build.props"
+    if path.exists():
+        text = path.read_text(encoding="utf-8-sig")
+        if build_pkg in text:
+            return "already wired"
+        if "</Project>" not in text:
+            return "skipped: Directory.Build.props has no </Project>"
+        new = text.replace("</Project>", props_block(build_pkg, version) + "</Project>", 1)
+        action = "patched"
+    else:
+        new = '<Project>\n' + props_block(build_pkg, version) + '</Project>\n'
+        action = "created"
+    if not dry_run:
+        path.write_text(new, encoding="utf-8")
+    return action
+
+
+def arch_skeleton(name, tfm, arch_pkg, version, refs, assemblies):
+    csproj = ('<Project Sdk="Microsoft.NET.Sdk">\n'
+              "  <PropertyGroup>\n"
+              f"    <TargetFramework>{tfm}</TargetFramework>\n"
+              "    <Nullable>enable</Nullable>\n"
+              "    <IsPackable>false</IsPackable>\n"
+              "    <IsTestProject>true</IsTestProject>\n"
+              "  </PropertyGroup>\n"
+              "  <ItemGroup>\n"
+              f'    <PackageReference Include="{arch_pkg}" Version="{version}" />\n'
+              '    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />\n'
+              '    <PackageReference Include="xunit" Version="2.*" />\n'
+              '    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />\n'
+              "  </ItemGroup>\n"
+              "  <ItemGroup>\n"
+              + "".join(f'    <ProjectReference Include="{r}" />\n' for r in refs) +
+              "  </ItemGroup>\n"
+              "</Project>\n")
+    loads = ",\n        ".join(f'Assembly.Load(new AssemblyName("{a}"))' for a in assemblies)
+    cs = (f"using System.Reflection;\n"
+          "using ArchUnitNET.Loader;\n"
+          "using ArchUnitNET.xUnit;\n"
+          "using Xunit;\n"
+          "using static ArchUnitNET.Fluent.ArchRuleDefinition;\n\n"
+          f"namespace {name}.Architecture.Tests;\n\n"
+          '[Trait("Category", "Architecture")]\n'
+          "public class ArchitectureTests\n{\n"
+          "    private static readonly ArchUnitNET.Domain.Architecture Arch = new ArchLoader()\n"
+          "        .LoadAssemblies(\n"
+          f"        {loads})\n"
+          "        .Build();\n\n"
+          "    [Fact]\n"
+          "    public void ProductionCodeDoesNotDependOnTestFrameworks()\n    {\n"
+          "        Types().That().ResideInNamespace(\"" + name + "\", true)\n"
+          "            .Should().NotDependOnAny(Types().That().ResideInNamespace(\"Xunit\", true))\n"
+          "            .Check(Arch);\n"
+          "    }\n}\n")
+    return csproj, cs
+
+
+def patch_constitution(project, dry_run):
+    path = project / ".specify" / "memory" / "constitution.yaml"
+    if not path.exists():
+        return {"skipped": "no .specify/memory/constitution.yaml"}
+    text = path.read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    principles = data.get("principles", [])
+    if any(QG_MARKER in str(p.get("description", "")) for p in principles):
+        return {"added": [], "note": "already present"}
+    if list(data.keys())[-1] != "principles":
+        return {"skipped": "principles is not the last key; add the quality-gate principles by hand"}
+    top = max([int(m.group(1)) for p in principles if (m := re.fullmatch(r"P(\d+)", str(p.get("id", ""))))] or [0])
+    blocks, ids = [], []
+    for i, (name, desc, gate) in enumerate(QG_PRINCIPLES, start=1):
+        pid = f"P{top + i}"
+        ids.append(pid)
+        blocks.append(yaml.safe_dump([{"id": pid, "name": name, "description": f"{desc} ({QG_MARKER})",
+                                       "severity": "NON-NEGOTIABLE", "gate_condition": gate}],
+                                     sort_keys=False, allow_unicode=True, width=1000).replace("- id:", "  - id:", 1).replace("\n  ", "\n    "))
+    if not dry_run:
+        sep = "" if text.endswith("\n") else "\n"
+        path.write_text(text + sep + "".join(blocks), encoding="utf-8")
+    return {"added": ids}
+
+
+def migrate_qg_config(config, registry, csharp_ok):
+    changes = []
+    stack = config.get("stack")
+    present = {(t.get("stack"), t.get("category")) for t in config.get("tools", [])}
+    for cat in QG_STACK_CATEGORIES + QG_ANY_CATEGORIES:
+        target_stack = stack if cat in QG_STACK_CATEGORIES else "any"
+        if stack == "csharp" and cat in QG_STACK_CATEGORIES and not csharp_ok:
+            continue
+        if (target_stack, cat) in present:
+            continue
+        entry = next((e for e in registry.get("entries", []) if e["stack"] == target_stack and e["category"] == cat), None)
+        if entry:
+            config.setdefault("tools", []).append({k: entry[k] for k in
+                                                   ("stack", "category", "tool", "run_command", "report_parser", "enabled") if k in entry})
+            changes.append(f"tools: added {cat} ({entry['tool']})")
+    for role in config.get("roles", []):
+        name = DEPRECATED_ROLES.get(role["name"], role["name"])
+        for g in QG_ROLE_GATES.get(name, []):
+            if g not in role.get("gates", []):
+                role.setdefault("gates", []).append(g)
+                changes.append(f"roles[{role['name']}].gates: +{g}")
+    for key, value in (("quality_gates", {"enabled": True, "diff_coverage_min": 80}),
+                       ("mutation", {"framework_enabled": False}),
+                       ("parallel", {"hardener_qa": True})):
+        if key not in config:
+            config[key] = value
+            changes.append(f"{key}: added")
+    return config, changes
+
+
+def run_qg(project, plugin_root, config, dry_run, version):
+    res = {}
+    registry = yaml.safe_load((plugin_root / "registry" / "tool-registry.yaml").read_text(encoding="utf-8"))
+    flavor = remote_flavor(project)
+    pkgs = QG_PACKAGES[flavor]
+    res["flavor"] = flavor
+    csharp_ok = False
+    if (config or {}).get("stack") == "csharp" or list(project.glob("*.sln")) or list(project.glob("*.csproj")):
+        found = scan_csharp_projects(project)
+        res["csharp"] = {"modern": [m["path"] for m in found["modern"]], "skipped_legacy": found["legacy"], "skipped_other": found["other"]}
+        csharp_ok = bool(found["modern"])
+        if csharp_ok:
+            res["csharp"]["directory_build_props"] = wire_directory_build_props(project, pkgs["build"], version, dry_run)
+            prod = [m for m in found["modern"] if not m["is_test"]]
+            sln = detect_sln(project) or project.name
+            name = Path(sln).stem
+            tests_dir = project / "tests" / f"{name}.Architecture.Tests"
+            if any(project.rglob("*Architecture*.csproj")):
+                res["csharp"]["arch_tests"] = "exists"
+            elif not prod:
+                res["csharp"]["arch_tests"] = "skipped: no production net8+ projects"
+            else:
+                refs = [os.path.relpath(project / m["path"], tests_dir).replace("\\", "/") for m in prod]
+                asm = [Path(m["path"]).stem for m in prod]
+                csproj, cs = arch_skeleton(name, prod[0]["tfm"], pkgs["arch"], version, refs, asm)
+                if not dry_run:
+                    tests_dir.mkdir(parents=True, exist_ok=True)
+                    (tests_dir / f"{name}.Architecture.Tests.csproj").write_text(csproj, encoding="utf-8")
+                    (tests_dir / "ArchitectureTests.cs").write_text(cs, encoding="utf-8")
+                res["csharp"]["arch_tests"] = f"created {tests_dir.relative_to(project).as_posix()} (add to the solution: dotnet sln add)"
+            res["constitution"] = patch_constitution(project, dry_run)
+    if config is not None:
+        cfg_path = project / ".claude" / "bob-pipeline.yaml"
+        config, changes = migrate_qg_config(config, registry, csharp_ok or config.get("stack") != "csharp")
+        if changes and not dry_run:
+            shutil.copyfile(cfg_path, cfg_path.with_name("bob-pipeline.yaml.bak-pre-1.3"))
+            cfg_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        res["config"] = changes
+    else:
+        res["config"] = {"skipped": "no .claude/bob-pipeline.yaml"}
+    return res
+
+
+def run(project, plugin_root, dry_run, steps, old_refs, prefer_new=False, qg_version=QG_VERSION):
     report = {"dry_run": dry_run, "steps": {}}
     cfg_path = project / ".claude" / "bob-pipeline.yaml"
     config = yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig")) if cfg_path.exists() else None
@@ -480,6 +716,9 @@ def run(project, plugin_root, dry_run, steps, old_refs, prefer_new=False):
             if r.returncode != 0:
                 res["error"] = r.stderr.strip()
         report["steps"]["untrack"] = res
+
+    if "qg" in steps:
+        report["steps"]["qg"] = run_qg(project, plugin_root, config, dry_run, qg_version)
     return report
 
 
@@ -488,17 +727,18 @@ def main():
     ap.add_argument("--project", required=True)
     ap.add_argument("--plugin-root", default=str(PLUGIN_ROOT))
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--steps", default=DEFAULT_STEPS, help="comma list of config,agents,support,untrack (untrack is opt-in)")
+    ap.add_argument("--steps", default=DEFAULT_STEPS, help="comma list of config,agents,support,untrack,qg (untrack and qg are opt-in)")
     ap.add_argument("--old-ref", action="append", help="git ref(s) of the plugin holding old agent templates")
+    ap.add_argument("--qg-version", default=QG_VERSION, help="version pinned for the QG package references")
     ap.add_argument("--prefer-new", action="store_true", help="resolve conflicting agent hunks to the new template (project edits elsewhere are kept)")
     args = ap.parse_args()
     steps = {s.strip() for s in args.steps.split(",") if s.strip()}
     if not steps <= ALL_STEPS:
-        ap.error("--steps must be a subset of config,agents,support,untrack")
+        ap.error("--steps must be a subset of config,agents,support,untrack,qg")
     project = Path(args.project).resolve()
     if not project.is_dir():
         ap.error(f"project dir not found: {project}")
-    report = run(project, Path(args.plugin_root).resolve(), args.dry_run, steps, args.old_ref or DEFAULT_OLD_REFS, args.prefer_new)
+    report = run(project, Path(args.plugin_root).resolve(), args.dry_run, steps, args.old_ref or DEFAULT_OLD_REFS, args.prefer_new, args.qg_version)
     json.dump(report, sys.stdout, indent=2)
     print()
     conflicts = any(f.get("status") == "conflicts" for f in report["steps"].get("agents", {}).get("files", {}).values())

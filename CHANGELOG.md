@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0
+
+Design: `docs/design-1.3.0.md` (D16-D24; D1-D15 unchanged).
+
+Speed
+- D16: hardener and QA run concurrently after the architect (QA in a detached worktree); merge rule re-runs only QA procedures that reference files the hardener changed (`scripts/parallel_plan.py qa-rerun`). Config `parallel.hardener_qa` (default true).
+- D17: specifier declares per-slice `files`; independent slices with disjoint file sets run in parallel worktrees up to `parallel_limit` (`parallel_plan.py batch`).
+- D18: send-back reports carry failing procedure ids and the exact failing output (<=40 lines); the coder reads them directly and fixes everything in one pass.
+- D19: `.bob/metrics.jsonl` (role runs, send-back reasons, approval waits) and `scripts/bob_metrics.py summarize`.
+
+Quality gates (enabled by default)
+- D20/D21: registry categories lint, format, architecture (blocking in the coder's final run and architect), diff-coverage >=80 and constitution-traceability (blocking at the merge gate; new pseudo-role `merge-gate` in `compute_gates.py`). New parsers `exitcode-*`, `diff-cover`, `hardening`; `scripts/constitution_trace.py`. Config: `quality_gates.enabled`, per-gate overrides, `diff_coverage_min`.
+- D22: mutation never blocks; hardener is semantic by default, unfixed findings block (`hardening-findings`); Stryker/mutmut only with `mutation.framework_enabled: true`; a low mutation score is a deviation. Behavior change: `mutation-score` no longer fails a slice.
+- D23: bob-init offers C# (net8+, net4x skipped) wiring: Directory.Build.props package reference, arch test skeleton, constitution principles; new opt-in upgrade step `qg` (`upgrade_project.py --steps qg`, `--qg-version`).
+
 ## 1.2.0
 
 Roles and test policy

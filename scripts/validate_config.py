@@ -15,8 +15,11 @@ from pathlib import Path
 import yaml
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
-KNOWN_PARSERS = {"stryker", "mutmut", "pit", "cobertura", "lcov", "jacoco", "lizard", "jscpd"}
-CATEGORIES = {"mutation", "coverage", "complexity", "duplication"}
+KNOWN_PARSERS = {"stryker", "mutmut", "pit", "cobertura", "lcov", "jacoco", "lizard", "jscpd",
+                 "exitcode-lint", "exitcode-format", "exitcode-architecture", "diff-cover",
+                 "constitution-trace"}  # constitution-trace is handled by scripts/constitution_trace.py
+CATEGORIES = {"mutation", "coverage", "complexity", "duplication"}  # every stack must resolve these
+QG_CATEGORIES = {"lint", "format", "architecture", "diff-coverage", "constitution-traceability"}  # optional, D20
 NON_SKIPPABLE = {"specifier", "coder"}
 DEPRECATED_ROLES = {"cleaner": "architect"}
 
@@ -49,7 +52,7 @@ def validate_registry(path: Path) -> list:
         for field in ("stack", "category", "tool", "run_command", "report_parser", "enabled"):
             if field not in e:
                 violations.append({"path": loc, "message": f"missing field '{field}'"})
-        if e.get("category") not in CATEGORIES:
+        if e.get("category") not in CATEGORIES | QG_CATEGORIES:
             violations.append({"path": loc, "message": f"unknown category '{e.get('category')}'"})
         if e.get("report_parser") not in KNOWN_PARSERS:
             violations.append({"path": loc, "message": f"report_parser '{e.get('report_parser')}' has no handler in scripts/parse_reports.py"})
@@ -110,7 +113,7 @@ def validate_config(config_path: Path, schema_path: Path, warnings=None) -> list
     if tests.get("integration_at") and not tests.get("integration_command"):
         warnings.append({"path": "tests/integration_at", "message": "integration_at is set but integration_command is absent: no integration run happens"})
     enabled_cats = {t["category"] for t in config["tools"] if t["enabled"]}
-    if "mutation" not in enabled_cats:
+    if "mutation" not in enabled_cats and (config.get("mutation") or {}).get("framework_enabled"):
         hardener = next((r for r in config["roles"] if r["name"] == "hardener"), None)
         if hardener and hardener["enabled"] and not hardener.get("degradation"):
             violations.append({"path": "roles/hardener", "message": "mutation category disabled but hardener has no 'degradation' behavior defined"})

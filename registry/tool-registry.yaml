@@ -5,6 +5,11 @@
 # scope_flag (mutation entries, required): flag template appended to run_command to
 # restrict mutation to the slice's changed files (design D5). {file} = one file (repeat the
 # flag per file), {files} = space-separated list, {classes} = comma-separated class names.
+# Quality-gate categories (design D20): lint, format, architecture (blocking, fast: coder final run +
+# architect), diff-coverage, constitution-traceability (blocking at the merge gate only). The
+# exitcode-* parsers read a file whose first line is the tool's exit code (roles write
+# `<exit>\n<output tail>` to .bob/reports/<category>-<slice>.txt). Arch tests carry Category=Architecture
+# and are part of the fast suite. Mutation entries are used only with mutation.framework_enabled: true (D22).
 entries:
   # ── csharp ──────────────────────────────────────────────────────
   - stack: csharp
@@ -26,6 +31,26 @@ entries:
     run_command: "dotnet test --collect:\"XPlat Code Coverage\""
     report_parser: cobertura
     enabled: true
+  - stack: csharp
+    category: lint
+    tool: dotnet-build-analyzers
+    run_command: "dotnet build -warnaserror --nologo"
+    report_parser: exitcode-lint
+    enabled: true
+  - stack: csharp
+    category: format
+    tool: dotnet-format
+    run_command: "dotnet format --verify-no-changes"
+    report_parser: exitcode-format
+    enabled: true
+  - stack: csharp
+    category: architecture
+    # ArchUnitNET tests from KirillMaster.QualityGates.Architecture (pet remotes) or
+    # TenenGroup.QualityGates (remote contains tenengroup); wired by bob-init / upgrade step qg.
+    tool: ArchUnitNET
+    run_command: 'dotnet test --filter "Category=Architecture"'
+    report_parser: exitcode-architecture
+    enabled: true
 
   # ── typescript / javascript ─────────────────────────────────────
   - stack: typescript
@@ -41,6 +66,18 @@ entries:
     run_command: "npx vitest run --coverage --coverage.reporter=lcov || npx jest --coverage --coverageReporters=lcov"
     report_parser: lcov
     enabled: true
+  - stack: typescript
+    category: lint
+    tool: tsc-eslint
+    run_command: "npx tsc --noEmit && npx eslint . --max-warnings 0"
+    report_parser: exitcode-lint
+    enabled: true
+  - stack: typescript
+    category: format
+    tool: prettier
+    run_command: "npx prettier --check ."
+    report_parser: exitcode-format
+    enabled: true
 
   # ── python ──────────────────────────────────────────────────────
   - stack: python
@@ -55,6 +92,18 @@ entries:
     tool: coverage.py
     run_command: "python -m coverage run -m pytest && python -m coverage xml"
     report_parser: cobertura
+    enabled: true
+  - stack: python
+    category: lint
+    tool: ruff
+    run_command: "python -m ruff check ."
+    report_parser: exitcode-lint
+    enabled: true
+  - stack: python
+    category: format
+    tool: ruff-format
+    run_command: "python -m ruff format --check ."
+    report_parser: exitcode-format
     enabled: true
 
   # ── java ────────────────────────────────────────────────────────
@@ -84,4 +133,18 @@ entries:
     tool: jscpd
     run_command: "npx jscpd --reporters json --output .bob/reports ."
     report_parser: jscpd
+    enabled: true
+  # diff-coverage: <coverage_xml> = the cobertura file of the merge-gate coverage run, <base> = slice base branch
+  - stack: any
+    category: diff-coverage
+    tool: diff-cover
+    run_command: "python -m diff_cover.diff_cover_tool <coverage_xml> --compare-branch=<base> --json-report .bob/reports/diff-cover.json"
+    report_parser: diff-cover
+    enabled: true
+  # constitution-traceability: no-op without .specify/memory/constitution.yaml; <green_tests> = list of passing test names
+  - stack: any
+    category: constitution-traceability
+    tool: constitution-trace
+    run_command: "python ${CLAUDE_PLUGIN_ROOT}/scripts/constitution_trace.py --constitution .specify/memory/constitution.yaml --green-tests <green_tests>"
+    report_parser: constitution-trace
     enabled: true

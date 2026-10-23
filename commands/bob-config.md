@@ -19,7 +19,8 @@ Read the config and present it as compact tables:
 - **Tests**: run_command | scoped_command | coverage_command | integration_command | integration_at (absent = no integration run)
 - **Tools**: category | tool | run command | enabled
 - **Human gates**: gherkin_approval, qa_report
-- **Thresholds**: mutation_score_min, coverage_policy, complexity_policy, duplication_policy
+- **Thresholds**: mutation_score_min (deviation only, never blocks), coverage_policy, complexity_policy, duplication_policy
+- **Quality gates / mutation / parallelism (1.3)**: `quality_gates.enabled`, `quality_gates.gates.<name>`, `quality_gates.diff_coverage_min`, `mutation.framework_enabled`, `parallel.hardener_qa`
 - **Flow**: send_back_routes, return_limit, parallel_limit, night_mode_default
 - **BDD framework**: value or "none (plain Gherkin + test tags)"
 

@@ -50,6 +50,37 @@
     },
     "return_limit": { "type": "integer", "minimum": 0, "maximum": 10 },
     "parallel_limit": { "type": "integer", "minimum": 1, "maximum": 8 },
+    "quality_gates": {
+      "description": "Quality gates (D20); enabled by default. Per-gate override via gates.<name>: false.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "diff_coverage_min": { "type": "number", "minimum": 0, "maximum": 100, "default": 80 },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lint": { "type": "boolean" },
+            "format": { "type": "boolean" },
+            "architecture": { "type": "boolean" },
+            "diff-coverage": { "type": "boolean" },
+            "constitution-traceability": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "mutation": {
+      "description": "Mutation frameworks run only when framework_enabled is true (D22); the hardener is semantic by default.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "framework_enabled": { "type": "boolean", "default": false } }
+    },
+    "parallel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "hardener_qa": { "type": "boolean", "default": true } }
+    },
     "bdd_framework": { "type": "string", "enum": ["reqnroll", "cucumber-js", "behave"] },
     "night_mode_default": { "type": "boolean" }
   },
@@ -84,7 +115,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["tests-green", "mutation-score", "complexity-baseline", "duplication-baseline", "gherkin-traceability"]
+            "enum": ["tests-green", "mutation-score", "hardening-findings", "complexity-baseline", "duplication-baseline", "gherkin-traceability", "lint", "format", "architecture", "diff-coverage", "constitution-traceability"]
           }
         },
         "degradation": { "type": "string" }
@@ -96,7 +127,7 @@
       "additionalProperties": false,
       "properties": {
         "stack": { "type": "string", "minLength": 1 },
-        "category": { "type": "string", "enum": ["mutation", "coverage", "complexity", "duplication"] },
+        "category": { "type": "string", "enum": ["mutation", "coverage", "complexity", "duplication", "lint", "format", "architecture", "diff-coverage", "constitution-traceability"] },
         "tool": { "type": "string", "minLength": 1 },
         "run_command": { "type": "string", "minLength": 1 },
         "report_parser": { "type": "string", "minLength": 1 },
