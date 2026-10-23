@@ -1,3 +1,5 @@
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +17,9 @@ def config():
     filled = (template
               .replace("{{PROJECT_NAME}}", "fixture")
               .replace("{{STACK}}", "csharp")
+              .replace("{{TESTS_RUN_COMMAND}}", "dotnet test")
+              .replace("{{TESTS_SCOPED_COMMAND}}", 'dotnet test --filter "{filter}"')
+              .replace("{{TESTS_COVERAGE_COMMAND}}", "dotnet test --collect:x")
               .replace("{{TOOLS}}", """
   - stack: csharp
     category: mutation
@@ -69,7 +74,7 @@ def test_coverage_is_informational_never_blocks(config):
 
 
 def test_complexity_equal_to_baseline_passes(config):
-    results = compute(config, "cleaner", [{"category": "complexity", "metric_value": 11},
+    results = compute(config, "architect", [{"category": "complexity", "metric_value": 11},
                                           {"category": "duplication", "metric_value": 3.0}],
                       {"complexity": 11, "duplication": 3.0}, 0, None)
     assert gate(results, "complexity-baseline")["passed"] is True
@@ -77,7 +82,7 @@ def test_complexity_equal_to_baseline_passes(config):
 
 
 def test_complexity_worse_than_baseline_fails(config):
-    results = compute(config, "cleaner", [{"category": "complexity", "metric_value": 14},
+    results = compute(config, "architect", [{"category": "complexity", "metric_value": 14},
                                           {"category": "duplication", "metric_value": 3.0}],
                       {"complexity": 11, "duplication": 3.0}, 0, None)
     g = gate(results, "complexity-baseline")
@@ -86,7 +91,7 @@ def test_complexity_worse_than_baseline_fails(config):
 
 
 def test_first_run_without_baseline_passes_and_notes_capture(config):
-    results = compute(config, "cleaner", [{"category": "complexity", "metric_value": 14},
+    results = compute(config, "architect", [{"category": "complexity", "metric_value": 14},
                                           {"category": "duplication", "metric_value": 3.0}],
                       None, 0, None)
     g = gate(results, "complexity-baseline")
@@ -122,3 +127,43 @@ def test_mutation_disabled_degrades_instead_of_blocking(config):
 def test_missing_mutation_metric_fails(config):
     results = compute(config, "hardener", [], None, 0, None)
     assert gate(results, "mutation-score")["passed"] is False
+
+
+def test_legacy_cleaner_role_maps_to_architect(config):
+    results = compute(config, "cleaner", [{"category": "complexity", "metric_value": 5},
+                                          {"category": "duplication", "metric_value": 1.0}],
+                      {"complexity": 11, "duplication": 3.0}, 0, None)
+    assert gate(results, "complexity-baseline")["passed"] is True
+
+
+def test_disabled_role_yields_no_gates(config):
+    next(r for r in config["roles"] if r["name"] == "hardener")["enabled"] = False
+    assert compute(config, "hardener", [], None, None, None) == []
+
+
+def test_first_run_reports_captured_baselines(config):
+    captured = {}
+    compute(config, "architect", [{"category": "complexity", "metric_value": 14},
+                                  {"category": "duplication", "metric_value": 3.0}],
+            None, 0, None, captured=captured)
+    assert captured == {"complexity": 14, "duplication": 3.0}
+
+
+def test_cli_persists_baseline_on_first_capture(config, tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(yaml.safe_dump(config), encoding="utf-8")
+    metrics = tmp_path / "m.json"
+    metrics.write_text(json.dumps([{"category": "complexity", "metric_value": 14},
+                                   {"category": "duplication", "metric_value": 3.0}]), encoding="utf-8")
+    base = tmp_path / ".bob" / "baselines.json"
+    cmd = [sys.executable, str(ROOT / "scripts" / "compute_gates.py"), "--config", str(cfg),
+           "--role", "architect", "--metrics", str(metrics), "--baselines", str(base), "--tests-exit", "0"]
+    subprocess.run(cmd, check=True, capture_output=True)
+    assert json.loads(base.read_text()) == {"complexity": 14, "duplication": 3.0}
+    worse = tmp_path / "w.json"
+    worse.write_text(json.dumps([{"category": "complexity", "metric_value": 20},
+                                 {"category": "duplication", "metric_value": 3.0}]), encoding="utf-8")
+    cmd[cmd.index("--metrics") + 1] = str(worse)
+    out = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    g = next(r for r in json.loads(out.stdout) if r["gate"] == "complexity-baseline")
+    assert g["passed"] is False and g["baseline"] == 14

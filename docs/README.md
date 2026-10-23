@@ -1,6 +1,6 @@
 # bob-pipeline — user guide
 
-A Claude Code plugin that runs features through an Uncle Bob-style pipeline of six role subagents — **Specifier → Coder → Cleaner → Architect → Hardener → QA** — replacing human code review with a *gauntlet of tests*: mechanical quality gates (mutation score, complexity, duplication, traceability) computed by scripts, never by model judgment. Humans review only two things: the Gherkin scenarios **before** any code exists, and the QA report **after**.
+A Claude Code plugin that runs features through an Uncle Bob-style pipeline of five role subagents — **Specifier → Coder → Architect → Hardener → QA** — replacing human code review with a *gauntlet of tests*: mechanical quality gates (mutation score, complexity, duplication, traceability) computed by scripts, never by model judgment. Humans review only two things: the Gherkin scenarios **before** any code exists, and the QA report **after**.
 
 ## Installation
 
@@ -18,10 +18,10 @@ Requirements: a git repository, Python 3.10+ on PATH (for the gate scripts), and
 /bob-run "users can reset their password via email"
 ```
 
-1. `/bob-init` detects your stack, freezes quality tools from the registry, interviews you (defaults = Bob's flow), writes `.claude/bob-pipeline.yaml` and instantiates the six role agents into `.claude/agents/bob/`.
+1. `/bob-init` detects your stack, freezes quality tools from the registry, interviews you (defaults come from `templates/bob-pipeline.yaml`), writes `.claude/bob-pipeline.yaml` and instantiates the six role agents into `.claude/agents/bob/`.
 2. `/bob-run` sends the Specifier to turn your description into Gherkin scenarios + QA procedures + vertical slices. **You approve or reject that document — this is your main leverage point.**
 3. After approval each slice runs through the pipeline in an isolated git worktree (`.worktrees/bob-<feature>-<slice>`). Each role makes exactly one labeled commit — `bob(coder): S1 — …` — so the per-role diff is your audit trail.
-4. Between handoffs the orchestrator runs the mechanical gates. Failures are repaired in place (e.g. Hardener kills surviving mutants with new tests) or sent back along fixed routes (QA fail → Coder; Architect fail → Cleaner/Coder), at most `return_limit` times.
+4. Between handoffs the orchestrator runs the mechanical gates. Failures are repaired in place (e.g. Hardener kills surviving mutants with new tests) or sent back along fixed routes (QA fail → Coder; Architect fail → Coder), at most `return_limit` times.
 5. Slices that pass everything are merged into your branch with `--no-ff` (no squash — history is the audit trail). You get a run report with scenario verdicts, gates, commits, and every deviation.
 
 ## /bob-init walkthrough
@@ -41,6 +41,8 @@ Default tool registry:
 | TypeScript/JS | StrykerJS | test-runner coverage (lcov) |
 | Python | mutmut | coverage.py (cobertura) |
 | Java | PIT | JaCoCo |
+
+Each mutation tool carries a `scope_flag` (e.g. Stryker.NET `--mutate "{file}"`, mutmut `--paths-to-mutate {files}`) so the Hardener mutates only the files changed by the slice.
 | any | — | complexity: lizard · duplication: jscpd |
 
 ## Daily usage
@@ -62,19 +64,33 @@ Default tool registry:
 
 ## Configuration reference (`.claude/bob-pipeline.yaml`)
 
-| Key | Default | Meaning |
+All defaults (roles, models, thresholds, routes, per-stack test commands) live in `templates/bob-pipeline.yaml`; the table below only describes keys. The deprecated `cleaner` role is still accepted (validator warning) and treated as `architect`.
+
+| Key | Value | Meaning |
 |---|---|---|
-| `roles[].model` | sonnet ×4, haiku (hardener, qa) | model per role, passed explicitly at spawn |
+| `roles[].model` | see template | model per role, passed explicitly at spawn |
 | `roles[].gates` | per role | which mechanical gates run after that role |
 | `human_gates.gherkin_approval` | `true` | approve scenarios before code |
 | `human_gates.qa_report` | `true` | present QA report at the end |
 | `thresholds.mutation_score_min` | `80` | hard gate (Hardener) |
 | `thresholds.coverage_policy` | `informational` | never blocks |
 | `thresholds.complexity_policy` / `duplication_policy` | `not-worse-than-baseline` | first run captures the baseline |
-| `send_back_routes` | `qa: coder`, `architect: [cleaner, coder]` | the only backward edges |
+| `send_back_routes` | see template | the only backward edges |
+| `tests.run_command` | per stack | coder's final run and the orchestrator's single merge-gate full-suite run |
+| `tests.scoped_command` | per stack | architect's scoped run; must contain `{filter}`; absent = build only |
+| `tests.coverage_command` | per stack | merge-gate run only (coverage is never a standalone run); absent = `run_command` |
 | `return_limit` / `parallel_limit` | `3` / `3` | send-back budget per slice / concurrent slices |
 | `night_mode_default` | `false` | make every run a night run |
 | `bdd_framework` | none | optional: `reqnroll` / `cucumber-js` / `behave`; default is a plain Gherkin doc + test tags (`[Trait("scenario","S1-AS1")]`, `describe('@S1-AS1')`, `@pytest.mark.scenario("S1-AS1")`, `@Tag("S1-AS1")`) |
+
+## Upgrading a 1.0/1.1 project
+
+```
+/bob-init --upgrade --dry-run   # preview: JSON report, nothing written
+/bob-init --upgrade             # apply
+```
+
+Backend: `python scripts/upgrade_project.py --project <dir> [--dry-run] [--steps config,agents,support] [--old-ref <ref>]`. It migrates the config (cleaner -> architect, adds `tests.*` and `scope_flag`; backup `bob-pipeline.yaml.bak-pre-1.2`), 3-way merges `.claude/agents/bob/*.md` with `git merge-file` (base = old plugin template from this repo's git history rendered with the values recovered from your copy, ours = your copy, theirs = new template), deletes `cleaner.md`, appends `.bob` runtime entries to `.gitignore` and merges `permissions.allow` into `.claude/settings.json`. Exit 1 = conflict markers left in agent files.
 
 ## Troubleshooting (outcomes you may see)
 
@@ -101,7 +117,7 @@ agents/       role templates ({{PROJECT_NAME}}, {{TECH_STACK}}, … filled at in
 templates/    config, Gherkin, run report, state, worktree-merge protocol
 registry/     frozen tool registry per stack
 schemas/      JSON Schema for the project config
-scripts/      validate_config.py · parse_reports.py · compute_gates.py (the only verdict source)
+scripts/      validate_config.py · parse_reports.py · compute_gates.py (the only verdict source) · upgrade_project.py
 tests/        pytest suite for the scripts + runnable fixtures (reset via tests/fixtures/reset.py)
 ```
 
@@ -115,4 +131,4 @@ Driver (PowerShell 5.1+), run from anywhere:
 powershell -File <plugin>/scripts/bob-loop.ps1 -ProjectDir C:\work\myproject -Feature "describe a feature" -MaxIterations 20
 ```
 
-`-Feature` is used only for the first iteration (Specifier phase); later iterations use `--resume`. Each iteration runs `claude -p "/bob-pipeline:bob-run ... --night --one-slice" --permission-mode bypassPermissions` in the project dir and logs to `<project>/.bob/loop-logs/iter-NN.log`. The loop stops on `done`, `failed`, a missing final line, or after `-MaxIterations`. Re-run it to continue after a stop; it resumes from state.
+`-Feature` is used only for the first iteration (Specifier phase); later iterations use `--resume`. Each iteration runs `claude -p "/bob-pipeline:bob-run ... --night --one-slice" --permission-mode bypassPermissions` in the project dir and logs to `<project>/.bob/loop-logs/iter-NN.log`. The prompt is passed via stdin (UTF-8). The loop stops on `done`, `failed`, a non-zero `claude` exit, a missing final line after one retry, or after `-MaxIterations`. A fresh run (no `.bob/run-state.yaml`) without `-Feature` is an error. Re-run it to continue after a stop; it resumes from state.

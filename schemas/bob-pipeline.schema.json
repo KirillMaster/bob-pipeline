@@ -13,6 +13,7 @@
       "minItems": 2,
       "items": { "$ref": "#/$defs/role" }
     },
+    "tests": { "$ref": "#/$defs/tests" },
     "tools": {
       "type": "array",
       "items": { "$ref": "#/$defs/tool" }
@@ -54,8 +55,20 @@
   },
   "$defs": {
     "roleName": {
+      "description": "'cleaner' is deprecated (merged into architect); accepted with a validator warning. Role defaults live in templates/bob-pipeline.yaml.",
       "type": "string",
       "enum": ["specifier", "coder", "cleaner", "architect", "hardener", "qa"]
+    },
+    "tests": {
+      "description": "Test commands; per-stack defaults live in templates/bob-pipeline.yaml.",
+      "type": "object",
+      "required": ["run_command"],
+      "additionalProperties": false,
+      "properties": {
+        "run_command": { "type": "string", "minLength": 1 },
+        "scoped_command": { "type": "string", "pattern": "[{]filter[}]" },
+        "coverage_command": { "type": "string", "minLength": 1 }
+      }
     },
     "role": {
       "type": "object",
@@ -85,6 +98,7 @@
         "tool": { "type": "string", "minLength": 1 },
         "run_command": { "type": "string", "minLength": 1 },
         "report_parser": { "type": "string", "minLength": 1 },
+        "scope_flag": { "type": "string", "minLength": 1 },
         "enabled": { "type": "boolean" }
       }
     }

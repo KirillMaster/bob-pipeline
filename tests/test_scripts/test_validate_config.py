@@ -25,6 +25,9 @@ def make_config(tmp_path, mutate=None):
     template = (ROOT / "templates" / "bob-pipeline.yaml").read_text(encoding="utf-8")
     text = (template.replace("{{PROJECT_NAME}}", "t")
             .replace("{{STACK}}", "csharp")
+            .replace("{{TESTS_RUN_COMMAND}}", "dotnet test")
+            .replace("{{TESTS_SCOPED_COMMAND}}", 'dotnet test --filter "{filter}"')
+            .replace("{{TESTS_COVERAGE_COMMAND}}", "dotnet test --collect:x")
             .replace("{{TOOLS}}", VALID_TOOLS))
     if mutate:
         text = mutate(text)
@@ -116,3 +119,54 @@ def test_registry_unresolved_category_rejected(tmp_path):
     r = run("--registry", str(reg))
     assert r.returncode == 1
     assert any("unresolved" in v["message"] for v in json.loads(r.stderr)["violations"])
+
+
+def legacy_cleaner(text):
+    return text.replace("  - name: architect\n", "  - name: cleaner\n", 1).replace("architect: coder", "cleaner: coder")
+
+
+def test_template_has_no_cleaner_role():
+    import yaml
+    tpl = (ROOT / "templates" / "bob-pipeline.yaml").read_text(encoding="utf-8")
+    names = [r["name"] for r in yaml.safe_load(tpl.replace("{{TOOLS}}", "[]"))["roles"]]
+    assert names == ["specifier", "coder", "architect", "hardener", "qa"]
+
+
+def test_legacy_cleaner_accepted_with_deprecation_warning(tmp_path):
+    r = run(str(make_config(tmp_path, legacy_cleaner)))
+    assert r.returncode == 0, r.stderr
+    assert "deprecated" in r.stderr and "cleaner" in r.stderr
+
+
+def test_cleaner_and_architect_together_is_duplicate(tmp_path):
+    def both(text):
+        return text.replace("  - name: hardener\n", "  - name: cleaner\n    model: sonnet\n    enabled: true\n    gates: [tests-green]\n  - name: hardener\n", 1)
+    r = run(str(make_config(tmp_path, both)))
+    assert r.returncode == 1 and "duplicate" in r.stderr
+
+
+def test_scoped_command_requires_filter_placeholder(tmp_path):
+    r = run(str(make_config(tmp_path, lambda t: t.replace('--filter "{filter}"', ""))))
+    assert r.returncode == 1
+
+
+def test_tests_section_is_optional_for_legacy_configs(tmp_path):
+    import re
+    r = run(str(make_config(tmp_path, lambda t: re.sub(r"(?ms)^tests:.*?\n\n", "", t))))
+    assert r.returncode == 0, r.stderr
+
+
+def test_registry_mutation_entries_have_scope_flag():
+    import yaml
+    data = yaml.safe_load((ROOT / "registry" / "tool-registry.yaml").read_text(encoding="utf-8"))
+    flags = {e["tool"]: e["scope_flag"] for e in data["entries"] if e["category"] == "mutation"}
+    assert flags["Stryker.NET"] == '--mutate "{file}"'
+    assert "mutmut" in flags and "StrykerJS" in flags
+    assert run("--registry", str(ROOT / "registry" / "tool-registry.yaml")).returncode == 0
+
+
+def test_registry_mutation_without_scope_flag_rejected(tmp_path):
+    f = tmp_path / "reg.yaml"
+    f.write_text("entries:\n  - {stack: any, category: mutation, tool: x, run_command: x, report_parser: stryker, enabled: true}\n", encoding="utf-8")
+    r = run("--registry", str(f))
+    assert r.returncode == 1 and "scope_flag" in r.stderr
