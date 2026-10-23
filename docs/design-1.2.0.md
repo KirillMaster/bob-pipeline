@@ -75,3 +75,9 @@ tests:
 - Roles must never edit `.specify/` artifacts (spec/plan/tasks/constitution); a needed change → `send-back` / `fail` with diagnosis `spec-change:` for the user to run yamlkit.
 - No `.specify/memory/constitution.yaml` → rule is a no-op (standalone mode).
 - Specifier JSON return gets an extra field `"slices_file":"<path to slice breakdown>"` (slice = "-").
+
+## D14. Integration tests only at the very last step
+- Tests are split: `tests.run_command` / `scoped_command` = fast suite (unit) — must EXCLUDE integration tests (stack template gives the filter, e.g. .NET `--filter "Category!=Integration"`, pytest `-m "not integration"`, jest `--testPathIgnorePatterns integration`).
+- `tests.integration_command` = integration suite. Runs exactly once, at the last step: by default in the slice merge gate (after qa pass, right before merge, together with the coverage run); with `tests.integration_at: run-end` — once after the last slice is merged, on the base branch (failure → run outcome `completed-with-failures` + diagnosis, no auto-revert).
+- No role (coder, architect, hardener, qa) ever runs integration tests. A QA procedure that needs integration behavior is marked `@integration` and is verified by the integration run result, not executed by qa.
+- Absent `integration_command` → nothing extra runs. bob-init detects integration test projects/markers and proposes the split; upgrade adds the exclusion filter to existing `run_command`.
