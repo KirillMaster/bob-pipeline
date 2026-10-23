@@ -81,3 +81,9 @@ tests:
 - `tests.integration_command` = integration suite. Runs exactly once, at the last step: by default in the slice merge gate (after qa pass, right before merge, together with the coverage run); with `tests.integration_at: run-end` — once after the last slice is merged, on the base branch (failure → run outcome `completed-with-failures` + diagnosis, no auto-revert).
 - No role (coder, architect, hardener, qa) ever runs integration tests. A QA procedure that needs integration behavior is marked `@integration` and is verified by the integration run result, not executed by qa.
 - Absent `integration_command` → nothing extra runs. bob-init detects integration test projects/markers and proposes the split; upgrade adds the exclusion filter to existing `run_command`.
+
+## D15. bob files are never tracked in the project repo
+- `.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/` are local tooling: bob-init and upgrade add them to `.git/info/exclude` (local, shared by all worktrees), NOT to `.gitignore` (which is tracked and visible to teammates).
+- Upgrade step `untrack`: if any of these paths are tracked, `git rm -r --cached` them (files stay on disk); the caller commits that removal (one PR per repo).
+- Because they are untracked, slice worktrees do not contain them: the orchestrator reads the config, agents and `.bob/run-state.yaml` from the MAIN project root (`git rev-parse --path-format=absolute --git-common-dir` → its parent), never from the slice worktree; per-slice state lives in the main root under `.bob/slices/<slice>/` or is passed explicitly.
+- Roles must never `git add -A` / `git add .` blindly — stage explicit paths; never stage `.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`.
