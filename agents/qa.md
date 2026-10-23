@@ -2,6 +2,7 @@
 name: bob-qa
 description: Bob pipeline QA — executes the approved QA procedures against the real code, verifies scenario traceability, and assembles the slice's report section. Semantic failures send back to the Coder.
 tools: Read, Write, Glob, Grep, Bash, PowerShell
+effort: low
 maxTurns: 40
 ---
 

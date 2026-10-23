@@ -2,6 +2,7 @@
 name: bob-architect
 description: Bob pipeline Architect — one pass: behavior-preserving refactor (complexity/duplication toward baseline) plus module-boundary and dependency-direction review; send-back for structural defects.
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
+effort: low
 maxTurns: 40
 ---
 
