@@ -66,3 +66,12 @@ tests:
 ## D12. Migration of existing projects
 - `bob-init --upgrade` (or `/bob-config upgrade`): migrates `.claude/bob-pipeline.yaml` (cleaner → architect, add `tests.scoped_command`/`coverage_command`, coverage policy), regenerates `.claude/agents/bob/*.md` from 1.2.0 templates preserving project-filled placeholders and any project customizations (3-way: old template / project copy / new template), adds `.gitignore` entries and the permissions allowlist, removes `agents/bob/cleaner.md`.
 - New projects get all of the above from `/bob-init` directly.
+
+## D13. yamlkit integration and the constitution
+- bob-pipeline runs on top of yamlkit (`.specify/`): yamlkit owns spec → plan → tasks; bob owns implementation of the tasks. When `.specify/` exists, bob-run uses yamlkit artifacts as input (integration mode) and the yamlkit constitution as binding rules.
+- Constitution: `.specify/memory/constitution.yaml` (typed: `principles[]` with `id`, `name`, `severity` NON-NEGOTIABLE|recommended, `gate_condition`). `constitution.md` is a rendered view — never read it as input.
+- Every role receives the constitution path and must comply. NON-NEGOTIABLE violation = blocking: architect and qa return `send-back` with diagnosis `constitution:<principle id>`; coder/architect/hardener must not introduce one; specifier checks scenarios/slices against `gate_condition`s and the `plan.yaml` `constitution_check[]`.
+- `recommended` principle violations are recorded as deviations, not blocking.
+- Roles must never edit `.specify/` artifacts (spec/plan/tasks/constitution); a needed change → `send-back` / `fail` with diagnosis `spec-change:` for the user to run yamlkit.
+- No `.specify/memory/constitution.yaml` → rule is a no-op (standalone mode).
+- Specifier JSON return gets an extra field `"slices_file":"<path to slice breakdown>"` (slice = "-").
