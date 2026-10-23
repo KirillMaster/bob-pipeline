@@ -7,7 +7,13 @@ entries:
   - stack: csharp
     category: mutation
     tool: Stryker.NET
-    run_command: "dotnet stryker --reporter json"
+    # Scoping is mandatory, not optional: without --mutate/--test-project the run
+    # defaults to the whole solution, which is both slow and gives a diluted,
+    # misleading score (real incident: 11.83% whole-project vs. 100% once scoped
+    # to the slice's changed files). The role prompt fills in <SliceFilesGlob> and
+    # <ScopedTestProject> per slice; never point --test-project at a Testcontainers-
+    # based integration test project (mutant x test x container-startup hangs).
+    run_command: "dotnet stryker --reporter json --mutate <SliceFilesGlob> --test-project <ScopedTestProject> --timeout-ms 60000 --concurrency 4"
     report_parser: stryker
     enabled: true
   - stack: csharp

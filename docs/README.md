@@ -50,6 +50,7 @@ Default tool registry:
 /bob-run                              # yamlkit mode: picks up specs/*/spec.yaml + tasks automatically
 /bob-run "..." skip hardener          # per-feature role skip (specifier/coder can never be skipped)
 /bob-run "..." --night                # night mode: zero questions, auto-approve, morning report
+/bob-run --resume --night --one-slice # process exactly one slice, print BOB-LOOP: next|done|failed
 /bob-run --resume                     # continue an interrupted run from the last role commit
 /bob-config                           # show frozen configuration
 /bob-config "mutation threshold 90"   # change it (validated before writing)
@@ -103,3 +104,15 @@ schemas/      JSON Schema for the project config
 scripts/      validate_config.py · parse_reports.py · compute_gates.py (the only verdict source)
 tests/        pytest suite for the scripts + runnable fixtures (reset via tests/fixtures/reset.py)
 ```
+
+## One slice per session
+
+A single `/bob-run` keeps every slice in one orchestrator context, which grows large on big features. `--one-slice` runs exactly one ready slice (full role loop + merge), persists progress to `.bob/run-state.yaml` (plus per-worktree `.bob/state.yaml` and report files), and ends with a machine-readable last line: `BOB-LOOP: next` (more slices runnable), `BOB-LOOP: done` (all merged, report written) or `BOB-LOOP: failed`. Nothing depends on chat memory, so each run can be a fresh session.
+
+Driver (PowerShell 5.1+), run from anywhere:
+
+```
+powershell -File <plugin>/scripts/bob-loop.ps1 -ProjectDir C:\work\myproject -Feature "describe a feature" -MaxIterations 20
+```
+
+`-Feature` is used only for the first iteration (Specifier phase); later iterations use `--resume`. Each iteration runs `claude -p "/bob-pipeline:bob-run ... --night --one-slice" --permission-mode bypassPermissions` in the project dir and logs to `<project>/.bob/loop-logs/iter-NN.log`. The loop stops on `done`, `failed`, a missing final line, or after `-MaxIterations`. Re-run it to continue after a stop; it resumes from state.
