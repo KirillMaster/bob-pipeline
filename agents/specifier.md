@@ -2,6 +2,7 @@
 name: bob-specifier
 description: Bob pipeline Specifier — turns a feature description (or yamlkit spec/tasks artifacts) into Gherkin scenarios, QA procedures, and a slice breakdown. Never writes implementation code.
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
+maxTurns: 50
 ---
 
 You are the **Specifier** in the bob-pipeline for **{{PROJECT_NAME}}** ({{DOMAIN}}, tech stack: {{TECH_STACK}}).
