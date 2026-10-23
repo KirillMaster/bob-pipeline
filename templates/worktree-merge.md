@@ -23,7 +23,7 @@ orchestrator (/bob-run) executes merges — roles never merge.
 - Every configured gate for every executed role: `passed: true` (from compute_gates.py output).
 - QA verdict for the slice: all scenarios `pass`.
 - One labeled commit per non-skipped role present on the slice branch (verified via `git log`).
-- Working test suite green at the slice branch head.
+- **Merge gate run (D2/D4)**: exactly one full-suite run in the slice worktree (`tests.coverage_command` if configured, else `tests.run_command`) after qa passes; exit 0. Its exit code and coverage feed compute_gates — role claims are not a source.
 
 ## Merge steps
 
@@ -38,7 +38,7 @@ orchestrator (/bob-run) executes merges — roles never merge.
    **Never squash** — per-role commits ARE the audit trail (P3).
 3. On conflict:
    - Trivial (non-overlapping semantic intent, e.g. adjacent imports): resolve, run the
-     full test suite; green → proceed, red → abort the merge (`git merge --abort`).
+     full test suite (`tests.run_command`); green → proceed, red → abort the merge (`git merge --abort`).
    - Non-trivial or red after resolve: `git merge --abort`, mark the slice
      `failed` (reason: merge-conflict) in state and report, **preserve its worktree**
      for inspection, continue with remaining slices.
@@ -48,7 +48,7 @@ orchestrator (/bob-run) executes merges — roles never merge.
 
 ## Cleanup
 
-- Merged slice: `git worktree remove .worktrees/bob-<feature>-<slice>` and
-  `git branch -d bob/<feature>/<slice>` (safe delete — must already be merged).
+- Merged slice (**mandatory**, right after the merge): `git worktree remove .worktrees/bob-<feature>-<slice>` then `git branch -d bob/<feature>/<slice>` (safe delete — must already be merged). Verify: `git worktree list` no longer shows the path and `git branch --list bob/<feature>/<slice>` is empty. Any failure → recorded deviation, never silent.
+- Interrupted-run detection ignores worktrees whose branch is merged into the base (`git branch --merged <base>`) or whose state is `merged`.
 - Failed slice: keep both worktree and branch; the report links to them.
 - Rejected run (human rejected Gherkin): remove worktrees and branches created for it.
