@@ -18,6 +18,17 @@ PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 KNOWN_PARSERS = {"stryker", "mutmut", "pit", "cobertura", "lcov", "jacoco", "lizard", "jscpd"}
 CATEGORIES = {"mutation", "coverage", "complexity", "duplication"}
 NON_SKIPPABLE = {"specifier", "coder"}
+DEPRECATED_ROLES = {"cleaner": "architect"}
+
+
+def canon(name):
+    return DEPRECATED_ROLES.get(name, name)
+
+
+def warn(warnings):
+    if warnings:
+        json.dump({"warnings": warnings}, sys.stderr, indent=2)
+        sys.stderr.write("\n")
 
 
 def fail(violations):
@@ -42,6 +53,8 @@ def validate_registry(path: Path) -> list:
             violations.append({"path": loc, "message": f"unknown category '{e.get('category')}'"})
         if e.get("report_parser") not in KNOWN_PARSERS:
             violations.append({"path": loc, "message": f"report_parser '{e.get('report_parser')}' has no handler in scripts/parse_reports.py"})
+        if e.get("category") == "mutation" and not e.get("scope_flag"):
+            violations.append({"path": loc, "message": "mutation entry requires 'scope_flag' (slice-scoped mutation, design D5)"})
         key = (e.get("stack"), e.get("category"))
         if key in seen:
             violations.append({"path": loc, "message": f"duplicate entry for {key}"})
@@ -56,7 +69,8 @@ def validate_registry(path: Path) -> list:
     return violations
 
 
-def validate_config(config_path: Path, schema_path: Path) -> list:
+def validate_config(config_path: Path, schema_path: Path, warnings=None) -> list:
+    warnings = warnings if warnings is not None else []
     try:
         import jsonschema
     except ImportError:
@@ -72,18 +86,25 @@ def validate_config(config_path: Path, schema_path: Path) -> list:
         return violations
 
     # cross-field rules the schema can't express
-    role_names = [r["name"] for r in config["roles"]]
+    raw_names = [r["name"] for r in config["roles"]]
+    for n in raw_names:
+        if n in DEPRECATED_ROLES:
+            warnings.append({"path": f"roles/{n}", "message": f"role '{n}' is deprecated and treated as '{canon(n)}'"})
+    role_names = [canon(n) for n in raw_names]
     for required in NON_SKIPPABLE:
         if required not in role_names:
             violations.append({"path": "roles", "message": f"role '{required}' is mandatory and missing"})
-        elif not next(r for r in config["roles"] if r["name"] == required)["enabled"]:
+        elif not next(r for r in config["roles"] if canon(r["name"]) == required)["enabled"]:
             violations.append({"path": f"roles/{required}", "message": f"role '{required}' cannot be disabled"})
     if len(role_names) != len(set(role_names)):
-        violations.append({"path": "roles", "message": "duplicate role names"})
+        violations.append({"path": "roles", "message": "duplicate role names (cleaner counts as architect)"})
     for source, targets in config.get("send_back_routes", {}).items():
         targets = targets if isinstance(targets, list) else [targets]
+        for name in [source, *targets]:
+            if name in DEPRECATED_ROLES:
+                warnings.append({"path": f"send_back_routes/{source}", "message": f"'{name}' is deprecated and treated as '{canon(name)}'"})
         for t in targets:
-            if t not in role_names:
+            if canon(t) not in role_names:
                 violations.append({"path": f"send_back_routes/{source}", "message": f"target role '{t}' is not in roles"})
     enabled_cats = {t["category"] for t in config["tools"] if t["enabled"]}
     if "mutation" not in enabled_cats:
@@ -101,12 +122,14 @@ def main():
     args = ap.parse_args()
 
     violations = []
+    warnings = []
     if args.registry:
         violations += validate_registry(Path(args.registry))
     if args.config:
-        violations += validate_config(Path(args.config), Path(args.schema))
+        violations += validate_config(Path(args.config), Path(args.schema), warnings)
     if not args.config and not args.registry:
         ap.error("provide a config path and/or --registry")
+    warn(warnings)
     if violations:
         fail(violations)
     print("OK")

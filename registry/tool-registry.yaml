@@ -2,6 +2,9 @@
 # One entry per (stack, category). Entries with stack "any" are the fallback
 # used when no stack-specific entry exists for a category.
 # report_parser names a handler implemented in scripts/parse_reports.py.
+# scope_flag (mutation entries, required): flag template appended to run_command to
+# restrict mutation to the slice's changed files (design D5). {file} = one file (repeat the
+# flag per file), {files} = space-separated list, {classes} = comma-separated class names.
 entries:
   # ── csharp ──────────────────────────────────────────────────────
   - stack: csharp
@@ -10,11 +13,12 @@ entries:
     # Scoping is mandatory, not optional: without --mutate/--test-project the run
     # defaults to the whole solution, which is both slow and gives a diluted,
     # misleading score (real incident: 11.83% whole-project vs. 100% once scoped
-    # to the slice's changed files). The role prompt fills in <SliceFilesGlob> and
-    # <ScopedTestProject> per slice; never point --test-project at a Testcontainers-
+    # to the slice's changed files). The hardener appends scope_flag per changed file and
+    # fills in <ScopedTestProject> per slice; never point --test-project at a Testcontainers-
     # based integration test project (mutant x test x container-startup hangs).
-    run_command: "dotnet stryker --reporter json --mutate <SliceFilesGlob> --test-project <ScopedTestProject> --timeout-ms 60000 --concurrency 4"
+    run_command: "dotnet stryker --reporter json --test-project <ScopedTestProject> --timeout-ms 60000 --concurrency 4"
     report_parser: stryker
+    scope_flag: '--mutate "{file}"'
     enabled: true
   - stack: csharp
     category: coverage
@@ -29,6 +33,7 @@ entries:
     tool: StrykerJS
     run_command: "npx stryker run --reporters json"
     report_parser: stryker
+    scope_flag: "--mutate {files}"
     enabled: true
   - stack: typescript
     category: coverage
@@ -43,6 +48,7 @@ entries:
     tool: mutmut
     run_command: "python -m mutmut run"
     report_parser: mutmut
+    scope_flag: "--paths-to-mutate {files}"
     enabled: true
   - stack: python
     category: coverage
@@ -57,6 +63,7 @@ entries:
     tool: PIT
     run_command: "mvn org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML"
     report_parser: pit
+    scope_flag: "-DtargetClasses={classes}"
     enabled: true
   - stack: java
     category: coverage

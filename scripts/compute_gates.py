@@ -9,7 +9,9 @@ Usage:
 Inputs:
     metrics.json      list of {"category", "metric", "metric_value"} from parse_reports.py
                       (pass "[]" or an empty file when no tool metrics apply)
-    baselines.json    {"complexity": <number>, "duplication": <number>} captured at run start
+    baselines.json    {"complexity": <number>, "duplication": <number>}; a category with no
+                      baseline yet is captured from the current metric and written back to
+                      this path (when it is a file path), so the next run compares against it
     --tests-exit      exit code of the project test suite run (for the tests-green gate)
     traceability.json {"scenario_ids": [...], "traced_ids": [...]} for gherkin-traceability
 
@@ -29,7 +31,12 @@ def load_json_arg(value):
     if value is None:
         return None
     p = Path(value)
-    text = p.read_text(encoding="utf-8-sig") if p.exists() else value
+    if p.exists():
+        text = p.read_text(encoding="utf-8-sig")
+    elif value.lstrip().startswith(("[", "{")) or not value.strip():
+        text = value
+    else:
+        return None  # a path that doesn't exist yet (e.g. first-run baselines file)
     return json.loads(text) if text.strip() else None
 
 
@@ -53,10 +60,17 @@ def metric_for(metrics, category):
     return None
 
 
-def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None):
-    role = next((r for r in config["roles"] if r["name"] == role_name), None)
+DEPRECATED_ROLES = {"cleaner": "architect"}
+
+
+def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None, captured=None):
+    """captured: optional dict; categories whose baseline was first captured are added to it."""
+    role_name = DEPRECATED_ROLES.get(role_name, role_name)
+    role = next((r for r in config["roles"] if DEPRECATED_ROLES.get(r["name"], r["name"]) == role_name), None)
     if role is None:
         raise SystemExit(f"unknown role '{role_name}'")
+    if not role.get("enabled", True):
+        return []  # disabled role: no gates, no metrics expected
     thresholds = config["thresholds"]
     stack = stack or config.get("stack")
     enabled_cats = {
@@ -98,6 +112,8 @@ def compute(config, role_name, metrics, baselines, tests_exit, traceability, sta
                 results.append(result(gate, role_name, False, baseline=baseline, diagnosis=f"no {category} metric produced — run the {category} tool"))
             elif baseline is None:
                 # first run: nothing to compare against; value becomes the baseline
+                if captured is not None:
+                    captured[category] = value
                 results.append(result(gate, role_name, True, metric_value=value, diagnosis="first run — captured as baseline"))
             else:
                 ok = value <= baseline
@@ -139,15 +155,22 @@ def main():
     args = ap.parse_args()
 
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8-sig"))
+    baselines = load_json_arg(args.baselines)
+    captured = {}
     results = compute(
         config,
         args.role,
         load_json_arg(args.metrics) or [],
-        load_json_arg(args.baselines),
+        baselines,
         args.tests_exit,
         load_json_arg(args.traceability),
         args.stack,
+        captured,
     )
+    if captured and args.baselines and not args.baselines.lstrip().startswith(("[", "{")):
+        merged = {**(baselines or {}), **captured}
+        Path(args.baselines).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.baselines).write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
     json.dump(results, sys.stdout, indent=2)
     print()
 

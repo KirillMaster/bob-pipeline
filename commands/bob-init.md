@@ -1,11 +1,11 @@
 ---
 description: Initialize the bob-pipeline in this project — detect the stack, interview for configuration (Bob-flow defaults), freeze quality tools from the registry
-argument-hint: "[stack_override, e.g. 'python']"
+argument-hint: "[stack_override, e.g. 'python'] | --upgrade [--dry-run]"
 ---
 
 # /bob-init — initialize the bob-pipeline
 
-Set up the Uncle Bob pipeline in the current project. All decisions made here are frozen into `.claude/bob-pipeline.yaml` so later runs are deterministic and offline. `$ARGUMENTS` may contain an explicit stack override.
+Set up the Uncle Bob pipeline in the current project. All decisions made here are frozen into `.claude/bob-pipeline.yaml` so later runs are deterministic and offline. `$ARGUMENTS` may contain an explicit stack override, or `--upgrade` (see "Upgrade mode" at the end).
 
 Plugin files referenced below live under `${CLAUDE_PLUGIN_ROOT}` (registry, templates, schemas, scripts).
 
@@ -40,23 +40,24 @@ Load `${CLAUDE_PLUGIN_ROOT}/registry/tool-registry.yaml`. For each category (mut
 
 ## 4. Interview
 
-Ask **one question at a time**, defaults preselected (the defaults ARE Bob's flow):
+Ask **one question at a time**, defaults preselected. Every default is read from `${CLAUDE_PLUGIN_ROOT}/templates/bob-pipeline.yaml` (single source — never restate values from memory):
 
-1. Roles: full six-role pipeline? (default: yes; specifier and coder cannot be disabled)
-2. Per-role models (default: sonnet for specifier/coder/cleaner/architect, haiku for hardener/qa)
+1. Roles: full five-role pipeline? (default: yes; specifier and coder cannot be disabled)
+2. Per-role models (defaults: the `roles[].model` values in the template)
 3. Human gates (default: Gherkin approval before code — ON; final QA report — ON)
-4. Mutation score threshold (default: 80)
-5. Send-back limit / parallel slice limit (defaults: 3 / 3)
+4. Mutation score threshold (template `thresholds.mutation_score_min`)
+5. Send-back limit / parallel slice limit (template `return_limit` / `parallel_limit`)
 6. BDD framework binding? (default: none — plain Gherkin document + test tags; options: reqnroll / cucumber-js / behave, offer only what fits the stack)
 
 If the user says "defaults" / "accept all", skip the remaining questions.
 
 ## 5. Write config and role agents
 
-1. Instantiate `${CLAUDE_PLUGIN_ROOT}/templates/bob-pipeline.yaml`: fill `{{PROJECT_NAME}}` (repo/dir name), `{{STACK}}`, `{{TOOLS}}` (the frozen YAML list from step 3), apply interview answers.
+1. Instantiate `${CLAUDE_PLUGIN_ROOT}/templates/bob-pipeline.yaml`: fill `{{PROJECT_NAME}}` (repo/dir name), `{{STACK}}`, `{{TOOLS}}` (the frozen YAML list from step 3, including each tool's registry `scope_flag`), `{{TESTS_RUN_COMMAND}}` / `{{TESTS_SCOPED_COMMAND}}` / `{{TESTS_COVERAGE_COMMAND}}` (the `#@ <stack>.<key>` default lines in the template for the detected stack, with `{sln}` replaced by the detected solution/project file; keep `{filter}` literally; unknown stack → ask the user for the commands, omit scoped/coverage if none), apply interview answers.
 2. Write to `.claude/bob-pipeline.yaml`.
 3. Validate: `python ${CLAUDE_PLUGIN_ROOT}/scripts/validate_config.py .claude/bob-pipeline.yaml --schema ${CLAUDE_PLUGIN_ROOT}/schemas/bob-pipeline.schema.json`. Non-zero exit → fix the config per the JSON violations and re-validate; never leave an invalid config behind.
-4. Instantiate the six role templates from `${CLAUDE_PLUGIN_ROOT}/agents/*.md` into `.claude/agents/bob/`: replace `{{PROJECT_NAME}}`, `{{DOMAIN}}` (one line inferred from the README/codebase), `{{TECH_STACK}}`, `{{TOOLS}}` (tool names + run commands relevant to that role). These project-local copies are what `/bob-run` spawns.
+4. Instantiate the five role templates from `${CLAUDE_PLUGIN_ROOT}/agents/*.md` into `.claude/agents/bob/`: replace `{{PROJECT_NAME}}`, `{{DOMAIN}}` (one line inferred from the README/codebase), `{{TECH_STACK}}`, `{{TOOLS}}` (tool names + run commands relevant to that role). These project-local copies are what `/bob-run` spawns.
+5. Runtime ignores and permissions: `python ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade_project.py --project . --steps support` — appends the `.bob` runtime files (`run-state.yaml`, `state.yaml`, `loop-logs/`) and `.worktrees/` to `.gitignore`, and merges `permissions.allow` entries for the configured test/scoped/coverage/mutation commands into `.claude/settings.json` (existing entries are kept, nothing is overwritten).
 
 ## 6. Report — outcome `initialized`
 
@@ -66,3 +67,12 @@ Output exactly:
 - `tools_selected`: table of category → tool (mark `enabled: false` rows)
 - `warnings`: missing test infra, disabled categories (empty list if none)
 - Next step hint: `/bob-run "<feature description>"`.
+
+## Upgrade mode — `/bob-init --upgrade [--dry-run]`
+
+For a project initialized with 1.0.x/1.1.x. Requires `.claude/bob-pipeline.yaml` (else `not-initialized`). Never asks interview questions.
+
+1. Always start with the dry run and show the JSON report: `python ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade_project.py --project . --dry-run`. With `--dry-run` in `$ARGUMENTS`, stop here.
+2. Otherwise run it without `--dry-run`. Deterministic parts: config migration (`cleaner` merged into `architect`, `tests.*` added from the template defaults, `scope_flag` added to mutation tools; old file kept as `bob-pipeline.yaml.bak-pre-1.2`, comments are not preserved), `.gitignore` entries, `permissions.allow` merge, removal of `.claude/agents/bob/cleaner.md`.
+3. Agent files are merged 3-way per role: base = the old plugin template (read from the plugin git history; refs `v1.1.0`, `3456188`, `v1.0.0`, `d7caca1`, or `--old-ref <ref>`) rendered with the placeholder values recovered from the project copy; ours = the project copy; theirs = the new template rendered with the same values; combined by `git merge-file`. Filled placeholders and project customizations survive; new template text is taken. Exit 1 means conflict markers were left in the reported files — resolve them by hand (or ask the user). Placeholders new in 1.2.0 that had no old value are listed in `unresolved`; fill them as in step 5.4 of init. No usable old template (`no-old-template`) → regenerate that file as in init and re-apply customizations manually.
+4. Validate the migrated config (`validate_config.py`) and report: changes, files merged/conflicted/removed, permissions and ignore entries added.
