@@ -52,21 +52,23 @@ def gate(results, name):
     return next(r for r in results if r["gate"] == name)
 
 
-def test_mutation_below_threshold_fails_with_diagnosis(config):
+def test_mutation_below_threshold_is_only_a_deviation(config):
+    config["mutation"] = {"framework_enabled": True}
     results = compute(config, "hardener", [{"category": "mutation", "metric_value": 72}], None, 0, None)
     g = gate(results, "mutation-score")
-    assert g["passed"] is False
+    assert g["passed"] is True and g["deviation"] is True
     assert "72" in g["diagnosis"] and "80" in g["diagnosis"]
 
 
 def test_mutation_at_threshold_passes(config):
+    config["mutation"] = {"framework_enabled": True}
     results = compute(config, "hardener", [{"category": "mutation", "metric_value": 80}], None, 0, None)
     assert gate(results, "mutation-score")["passed"] is True
 
 
 def test_coverage_is_informational_never_blocks(config):
     results = compute(config, "hardener",
-                      [{"category": "mutation", "metric_value": 95},
+                      [{"category": "mutation", "metric_value": 95}, {"category": "hardening", "metric_value": 0},
                        {"category": "coverage", "metric_value": 10}], None, 0, None)
     cov = gate(results, "coverage-informational")
     assert cov["passed"] is True
@@ -121,12 +123,18 @@ def test_mutation_disabled_degrades_instead_of_blocking(config):
     results = compute(config, "hardener", [], None, 0, None)
     g = gate(results, "mutation-score")
     assert g["passed"] is True
-    assert "degraded" in g["diagnosis"]
+    assert "semantic" in g["diagnosis"]
 
 
-def test_missing_mutation_metric_fails(config):
-    results = compute(config, "hardener", [], None, 0, None)
-    assert gate(results, "mutation-score")["passed"] is False
+def test_missing_mutation_metric_is_a_deviation_when_framework_enabled(config):
+    config["mutation"] = {"framework_enabled": True}
+    g = gate(compute(config, "hardener", [], None, 0, None), "mutation-score")
+    assert g["passed"] is True and g["deviation"] is True
+
+
+def test_mutation_framework_off_by_default_ignores_metric(config):
+    g = gate(compute(config, "hardener", [{"category": "mutation", "metric_value": 10}], None, 0, None), "mutation-score")
+    assert g["passed"] is True and "deviation" not in g
 
 
 def test_legacy_cleaner_role_maps_to_architect(config):

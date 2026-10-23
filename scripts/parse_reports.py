@@ -140,7 +140,44 @@ def parse_jscpd(text: str) -> dict:
     return {"category": "duplication", "metric": "duplicated_lines_pct", "metric_value": round(float(pct), 2)}
 
 
+def exitcode_parser(category):
+    """Exit-code report: first line = exit code, the rest = output tail. metric_value 0 = pass."""
+    def parse(text: str) -> dict:
+        first = text.strip().splitlines()[0].strip() if text.strip() else ""
+        try:
+            code = int(first)
+        except ValueError:
+            raise ParseError("exit-code report must start with an integer exit code line")
+        return {"category": category, "metric": "exit_code", "metric_value": code}
+    return parse
+
+
+def parse_diff_cover(text: str) -> dict:
+    """diff-cover --json-report: total_percent_covered."""
+    data = json.loads(text)
+    try:
+        pct = data["total_percent_covered"]
+    except (KeyError, TypeError):
+        raise ParseError("not a diff-cover report: missing total_percent_covered")
+    return {"category": "diff-coverage", "metric": "diff_coverage_pct", "metric_value": round(float(pct), 2)}
+
+
+def parse_hardening(text: str) -> dict:
+    """Hardener findings JSON: {"unfixed_findings": n} (D22)."""
+    data = json.loads(text)
+    try:
+        n = int(data["unfixed_findings"])
+    except (KeyError, TypeError, ValueError):
+        raise ParseError("missing unfixed_findings")
+    return {"category": "hardening", "metric": "unfixed_findings", "metric_value": n}
+
+
 PARSERS = {
+    "exitcode-lint": exitcode_parser("lint"),
+    "exitcode-format": exitcode_parser("format"),
+    "exitcode-architecture": exitcode_parser("architecture"),
+    "diff-cover": parse_diff_cover,
+    "hardening": parse_hardening,
     "stryker": parse_stryker,
     "mutmut": parse_mutmut,
     "pit": parse_pit,

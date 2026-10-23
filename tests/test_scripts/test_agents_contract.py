@@ -39,3 +39,20 @@ def test_bob_files_go_to_git_exclude_not_gitignore():
 def test_hardener_builds_scope_from_scope_flag():
     assert "scope_flag" in read("agents/hardener.md")
     assert "--mutate" not in read("registry/tool-registry.yaml").split("scope_flag:")[0].split("tool: Stryker.NET")[1].split("run_command:")[1].split("\n")[0]
+
+
+def test_1_3_contract_hooks():
+    assert "## Send-back" in read("agents/qa.md") and "## Send-back" in read("agents/coder.md")
+    assert "unfixed_findings" in read("agents/hardener.md")
+    assert "files" in read("agents/specifier.md") and "DISJOINT" in read("agents/specifier.md")
+    run = read("commands/bob-run.md")
+    for token in ("bob_metrics.py", "parallel_plan.py qa-rerun", "parallel_plan.py batch", "--role merge-gate", "metrics.jsonl"):
+        assert token in run, token
+    assert "--steps qg" in read("commands/bob-init.md")
+
+
+def test_version_bumped_consistently():
+    import json
+    assert json.loads(read(".claude-plugin/plugin.json"))["version"] == "1.3.0"
+    assert json.loads(read(".claude-plugin/marketplace.json"))["plugins"][0]["version"] == "1.3.0"
+    assert read("CHANGELOG.md").startswith("# Changelog\n\n## 1.3.0")

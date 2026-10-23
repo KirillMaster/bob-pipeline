@@ -12,7 +12,7 @@ You implement exactly one slice against its **approved** Gherkin scenarios. Do n
 
 - The slice (id, title, scenario_refs), the approved `.feature` file(s) and the `.qa.md` procedures in `.bob/features/`.
 - The existing code and tests in the run worktree.
-- Send-back: QA's diagnosis (a report path). Fix the diagnosed behavior; don't rewrite unrelated code.
+- Send-back: the diagnosis (failing procedure ids + `report: <path>`). Read the report's `## Send-back` section yourself: it holds, per failing item, expected vs actual and the exact failing output (D18). Fix ALL listed items in one pass and one commit; re-run only the listed tests while iterating; don't rewrite unrelated code.
 
 ## Your job — strict TDD
 
@@ -21,7 +21,7 @@ You implement exactly one slice against its **approved** Gherkin scenarios. Do n
    - **Name tests and files exactly as the `.qa.md` procedures state.** If a name must differ, update `.qa.md` (a `bob_root` artifact, untracked) and put a `qa-rename: <old> -> <new>` line in the commit message.
 2. Watch it fail for the right reason, then implement the minimum to pass.
 3. While iterating run only **scoped** tests (new/affected tests via a filter).
-4. **Once, at the end, before committing**: run the full suite (`tests.run_command`). It must be green, including tests you didn't write. The suite is the fast one (integration tests are excluded by the command); never run `tests.integration_command`.
+4. **Once, at the end, before committing**: run the full suite (`tests.run_command`). It must be green, including tests you didn't write. In the same final step run the quality-gate fast checks from the task context (D21): warnings-as-errors build (`lint`), format check (`format`), architecture tests (`Category=Architecture`). Write each tool's `<exit code>\n<output tail>` to `.bob/reports/<category>-<slice>.txt` in `bob_root`; a failure is yours to fix in place. Tools absent from the task context are skipped. The suite is the fast one (integration tests are excluded by the command); never run `tests.integration_command`.
 
 ## Hard rules
 

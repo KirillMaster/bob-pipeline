@@ -55,3 +55,7 @@ orchestrator (/bob-run) executes merges — roles never merge.
 - Interrupted-run detection ignores worktrees whose branch is merged into the base (`git branch --merged <base>`) or whose state is `merged`.
 - Failed slice: keep both worktree and branch; the report links to them.
 - Rejected run (human rejected Gherkin): remove worktrees and branches created for it.
+
+## Parallel QA worktree (D16)
+
+The detached `.worktrees/bob-<feature>-<slice>-qa` worktree is removed (`git worktree remove --force`) as soon as QA returns, before the merge gate; it is never merged and has no branch. `git worktree list` must not show it afterwards (leftover = recorded deviation).

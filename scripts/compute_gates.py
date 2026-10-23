@@ -40,8 +40,10 @@ def load_json_arg(value):
     return json.loads(text) if text.strip() else None
 
 
-def result(gate, role, passed, metric_value=None, threshold=None, baseline=None, diagnosis=None):
+def result(gate, role, passed, metric_value=None, threshold=None, baseline=None, diagnosis=None, deviation=False):
     r = {"gate": gate, "role": role, "passed": passed}
+    if deviation:
+        r["deviation"] = True
     if metric_value is not None:
         r["metric_value"] = metric_value
     if threshold is not None:
@@ -61,16 +63,34 @@ def metric_for(metrics, category):
 
 
 DEPRECATED_ROLES = {"cleaner": "architect"}
+MERGE_GATE = "merge-gate"  # pseudo-role: gates of the orchestrator's merge-gate run (D20)
+MERGE_GATE_GATES = ["tests-green", "diff-coverage", "constitution-traceability"]
+# gate -> registry tool category whose metric feeds it (D20)
+QG_GATES = {
+    "lint": "lint",
+    "format": "format",
+    "architecture": "architecture",
+    "diff-coverage": "diff-coverage",
+    "constitution-traceability": "constitution-traceability",
+}
+DEFAULT_DIFF_COVERAGE_MIN = 80
 
 
 def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None, captured=None):
     """captured: optional dict; categories whose baseline was first captured are added to it."""
     role_name = DEPRECATED_ROLES.get(role_name, role_name)
-    role = next((r for r in config["roles"] if DEPRECATED_ROLES.get(r["name"], r["name"]) == role_name), None)
+    if role_name == MERGE_GATE:
+        role = {"name": MERGE_GATE, "enabled": True, "gates": MERGE_GATE_GATES}
+    else:
+        role = next((r for r in config["roles"] if DEPRECATED_ROLES.get(r["name"], r["name"]) == role_name), None)
     if role is None:
         raise SystemExit(f"unknown role '{role_name}'")
     if not role.get("enabled", True):
         return []  # disabled role: no gates, no metrics expected
+    qg = config.get("quality_gates") or {}
+    qg_on = qg.get("enabled", True)
+    qg_per_gate = qg.get("gates") or {}
+    framework_enabled = (config.get("mutation") or {}).get("framework_enabled", False)
     thresholds = config["thresholds"]
     stack = stack or config.get("stack")
     enabled_cats = {
@@ -88,17 +108,48 @@ def compute(config, role_name, metrics, baselines, tests_exit, traceability, sta
                 results.append(result(gate, role_name, ok, diagnosis=None if ok else f"test suite exited {tests_exit}"))
 
         elif gate == "mutation-score":
-            if "mutation" not in enabled_cats:
-                results.append(result(gate, role_name, True, diagnosis="mutation category disabled for this stack — role degraded to heuristic strengthening (recorded as deviation)"))
+            # D22: mutation never blocks — a low or missing score is a deviation, not a failure
+            if not framework_enabled or "mutation" not in enabled_cats:
+                results.append(result(gate, role_name, True, diagnosis="mutation framework off (mutation.framework_enabled) — semantic hardening only"))
                 continue
             value = metric_for(metrics, "mutation")
             threshold = thresholds["mutation_score_min"]
             if value is None:
-                results.append(result(gate, role_name, False, threshold=threshold, diagnosis="no mutation metric produced — run the mutation tool and parse its report"))
+                results.append(result(gate, role_name, True, threshold=threshold, deviation=True, diagnosis="DEVIATION: no mutation metric produced — record in the report"))
             else:
                 ok = value >= threshold
+                results.append(result(gate, role_name, True, metric_value=value, threshold=threshold, deviation=not ok,
+                                      diagnosis=None if ok else f"DEVIATION: mutation score {value} below threshold {threshold} (non-blocking)"))
+
+        elif gate == "hardening-findings":
+            value = metric_for(metrics, "hardening")
+            if value is None:
+                results.append(result(gate, role_name, False, diagnosis="no hardening metric produced — report unfixed_findings from the hardener report"))
+            else:
+                ok = value == 0
+                results.append(result(gate, role_name, ok, metric_value=value, threshold=0,
+                                      diagnosis=None if ok else f"{value} unfixed hardening finding(s): strengthen the tests (in-place repair) or send back to coder if production code is the cause"))
+
+        elif gate in QG_GATES:
+            category = QG_GATES[gate]
+            if not qg_on or qg_per_gate.get(gate, True) is False:
+                results.append(result(gate, role_name, True, diagnosis="quality gate disabled by config"))
+                continue
+            if category not in enabled_cats:
+                results.append(result(gate, role_name, True, diagnosis=f"no {category} tool enabled for this stack — gate skipped"))
+                continue
+            value = metric_for(metrics, category)
+            if value is None:
+                results.append(result(gate, role_name, False, diagnosis=f"no {category} metric produced — run the {category} tool"))
+            elif gate == "diff-coverage":
+                threshold = qg.get("diff_coverage_min", DEFAULT_DIFF_COVERAGE_MIN)
+                ok = value >= threshold
                 results.append(result(gate, role_name, ok, metric_value=value, threshold=threshold,
-                                      diagnosis=None if ok else f"mutation score {value} below threshold {threshold}: kill surviving mutants with new tests (in-place repair)"))
+                                      diagnosis=None if ok else f"diff coverage {value}% below {threshold}%: add tests for the changed lines"))
+            else:
+                ok = value == 0
+                results.append(result(gate, role_name, ok, metric_value=value, threshold=0,
+                                      diagnosis=None if ok else f"{category} failed ({value}): see the tool output and fix in place"))
 
         elif gate in ("complexity-baseline", "duplication-baseline"):
             category = gate.split("-")[0]

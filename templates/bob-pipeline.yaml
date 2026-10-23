@@ -17,18 +17,20 @@ roles:
   - name: coder
     model: sonnet
     enabled: true
-    gates: [tests-green]
+    gates: [tests-green, lint, format, architecture]
   # architect = behavior-preserving refactor (complexity/duplication toward baseline)
   # + module boundary review, one pass. Legacy `cleaner` is accepted and treated as architect.
   - name: architect
     model: sonnet
     enabled: true
-    gates: [tests-green, complexity-baseline, duplication-baseline]
+    gates: [tests-green, lint, format, architecture, complexity-baseline, duplication-baseline]
   - name: hardener
     model: haiku
     enabled: true
-    gates: [tests-green, mutation-score]
-    degradation: "no mutation tool: heuristic test strengthening (boundary values, error paths, null/empty inputs); recorded as a deviation"
+    # D22: semantic analysis by default (tests vs code: missing assertions, untested branches,
+    # boundaries); an unfixed finding blocks, a mutation SCORE below threshold never does.
+    gates: [tests-green, hardening-findings, mutation-score]
+    degradation: "no mutation tool: semantic test strengthening (boundary values, error paths, null/empty inputs); recorded as a deviation"
   - name: qa
     model: haiku
     enabled: true
@@ -83,7 +85,7 @@ human_gates:
   final_qa_report: true    # deliver the final run report to the human (P7)
 
 thresholds:
-  mutation_score_min: 80          # hard gate for the hardener handoff
+  mutation_score_min: 80          # a score below this is a deviation only (D22), never a block
   coverage_policy: informational  # reported, never blocks; collected only by the merge-gate run
   complexity_policy: not-worse-than-baseline
   duplication_policy: not-worse-than-baseline
@@ -93,6 +95,22 @@ thresholds:
 send_back_routes:
   qa: coder
   architect: coder
+
+# Quality gates (D20): enabled by default. lint/format/architecture block in the coder's final run and
+# the architect; diff-coverage and constitution-traceability block at the merge gate. Disable all with
+# enabled: false or one with gates.<name>: false.
+quality_gates:
+  enabled: true
+  diff_coverage_min: 80
+  # gates: {format: false}
+
+# Mutation frameworks (Stryker/mutmut/PIT) run only when true; the hardener is semantic by default (D22).
+mutation:
+  framework_enabled: false
+
+# Hardener and QA run concurrently after the architect (D16); false = sequential.
+parallel:
+  hardener_qa: true
 
 return_limit: 3     # max send-backs per slice
 parallel_limit: 3   # max concurrent worktree pipelines over independent slices
