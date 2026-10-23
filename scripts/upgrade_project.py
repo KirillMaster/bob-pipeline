@@ -53,8 +53,9 @@ ALL_STEPS = {"config", "agents", "support", "untrack", "qg"}
 QG_VERSION = "0.1.0"
 QG_PACKAGES = {
     "pet": {"build": "KirillMaster.QualityGates.Build", "arch": "KirillMaster.QualityGates.Architecture"},
-    "tenengroup": {"build": "TenenGroup.QualityGates.Build", "arch": "TenenGroup.QualityGates"},
+    "tenengroup": {"build": "TenenGroup.QualityGates.Build", "arch": "TenenGroup.ArchitectureRules"},
 }
+QG_TENENGROUP_VERSIONS = {"build": "0.3.0", "arch": "2.0.0"}
 QG_MARKER = "bob-pipeline quality gates"
 QG_STACK_CATEGORIES = ["lint", "format", "architecture"]
 QG_ANY_CATEGORIES = ["diff-coverage", "constitution-traceability"]
@@ -590,13 +591,16 @@ def run_qg(project, plugin_root, config, dry_run, version):
     flavor = remote_flavor(project)
     pkgs = QG_PACKAGES[flavor]
     res["flavor"] = flavor
+    build_version = arch_version = version
+    if flavor == "tenengroup" and version == QG_VERSION:
+        build_version, arch_version = QG_TENENGROUP_VERSIONS["build"], QG_TENENGROUP_VERSIONS["arch"]
     csharp_ok = False
     if (config or {}).get("stack") == "csharp" or list(project.glob("*.sln")) or list(project.glob("*.csproj")):
         found = scan_csharp_projects(project)
         res["csharp"] = {"modern": [m["path"] for m in found["modern"]], "skipped_legacy": found["legacy"], "skipped_other": found["other"]}
         csharp_ok = bool(found["modern"])
         if csharp_ok:
-            res["csharp"]["directory_build_props"] = wire_directory_build_props(project, pkgs["build"], version, dry_run)
+            res["csharp"]["directory_build_props"] = wire_directory_build_props(project, pkgs["build"], build_version, dry_run)
             prod = [m for m in found["modern"] if not m["is_test"]]
             sln = detect_sln(project) or project.name
             name = Path(sln).stem
@@ -608,7 +612,7 @@ def run_qg(project, plugin_root, config, dry_run, version):
             else:
                 refs = [os.path.relpath(project / m["path"], tests_dir).replace("\\", "/") for m in prod]
                 asm = [Path(m["path"]).stem for m in prod]
-                csproj, cs = arch_skeleton(name, prod[0]["tfm"], pkgs["arch"], version, refs, asm)
+                csproj, cs = arch_skeleton(name, prod[0]["tfm"], pkgs["arch"], arch_version, refs, asm)
                 if not dry_run:
                     tests_dir.mkdir(parents=True, exist_ok=True)
                     (tests_dir / f"{name}.Architecture.Tests.csproj").write_text(csproj, encoding="utf-8")

@@ -46,7 +46,7 @@ entries:
   - stack: csharp
     category: architecture
     # ArchUnitNET tests from KirillMaster.QualityGates.Architecture (pet remotes) or
-    # TenenGroup.QualityGates (remote contains tenengroup); wired by bob-init / upgrade step qg.
+    # TenenGroup.ArchitectureRules (remote contains tenengroup); wired by bob-init / upgrade step qg.
     tool: ArchUnitNET
     run_command: 'dotnet test --filter "Category=Architecture"'
     report_parser: exitcode-architecture

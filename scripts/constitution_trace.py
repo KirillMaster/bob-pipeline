@@ -5,8 +5,9 @@ Usage:
     python scripts/constitution_trace.py --constitution .specify/memory/constitution.yaml \
         [--green-tests <file with one passing test name per line>]
 
-Every NON-NEGOTIABLE principle must have a non-empty `gate_condition`; when it also lists
-`verified_by` entries (optional field), each entry must appear (substring) in the green-tests list.
+Every NON-NEGOTIABLE principle is traced by `verified_by` when present (optional yamlkit field): each
+entry must appear (substring) in the green-tests list. Without `verified_by` it falls back to requiring
+a non-empty `gate_condition`.
 No constitution file -> no-op (metric 0).
 
 Output (stdout): {"category": "constitution-traceability", "metric": "untraced_principles",
@@ -26,12 +27,12 @@ def trace(constitution, green_tests):
         if p.get("severity") != "NON-NEGOTIABLE":
             continue
         pid = p.get("id", "?")
-        if not str(p.get("gate_condition") or "").strip():
-            details.append({"id": pid, "reason": "no gate_condition"})
-            continue
         entries = p.get("verified_by") or []
         if isinstance(entries, str):
             entries = [entries]
+        if not entries and not str(p.get("gate_condition") or "").strip():
+            details.append({"id": pid, "reason": "no verified_by or gate_condition"})
+            continue
         missing = [e for e in entries if not any(e in t for t in green_tests)]
         if missing:
             details.append({"id": pid, "reason": "verified_by not green: " + ", ".join(missing)})

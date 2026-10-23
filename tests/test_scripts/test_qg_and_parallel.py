@@ -122,6 +122,13 @@ def test_trace_requires_gate_condition_and_green_verified_by():
     assert [d["id"] for d in out["details"]] == ["P1", "P2"]
 
 
+def test_trace_verified_by_replaces_gate_condition():
+    c = {"principles": [{"id": "P1", "severity": "NON-NEGOTIABLE", "verified_by": ["ArchTests.NoCycles"]},
+                        {"id": "P2", "severity": "NON-NEGOTIABLE"}]}
+    out = constitution_trace.trace(c, ["ArchTests.NoCycles"])
+    assert [d["id"] for d in out["details"]] == ["P2"]
+
+
 def test_trace_missing_constitution_is_noop(tmp_path):
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "constitution_trace.py"), "--constitution", str(tmp_path / "none.yaml")],
                        capture_output=True, text=True)
@@ -294,6 +301,15 @@ def test_qg_step_tenengroup_packages_and_dry_run(tmp_path):
     up.run(tmp_path, ROOT, False, {"qg"}, [], qg_version="1.2.3")
     props = (tmp_path / "Directory.Build.props").read_text(encoding="utf-8")
     assert "TenenGroup.QualityGates.Build" in props and 'Version="1.2.3"' in props
+
+
+def test_qg_tenengroup_default_package_ids_and_versions(tmp_path):
+    make_project(tmp_path, "git@github.com:tenengroup/svc.git")
+    up.run(tmp_path, ROOT, False, {"qg"}, [])
+    props = (tmp_path / "Directory.Build.props").read_text(encoding="utf-8")
+    assert "TenenGroup.QualityGates.Build" in props and 'Version="0.3.0"' in props
+    arch = (tmp_path / "tests" / "App.Architecture.Tests" / "App.Architecture.Tests.csproj").read_text(encoding="utf-8")
+    assert "TenenGroup.ArchitectureRules" in arch and "2.0.0" in arch
 
 
 def test_qg_patches_existing_directory_build_props(tmp_path):

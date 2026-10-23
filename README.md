@@ -40,7 +40,7 @@ License: MIT
 - **Parallelism**: hardener and QA run concurrently after the architect (`parallel.hardener_qa`); QA re-runs only procedures touching files the hardener changed; independent slices with disjoint declared `files` run in parallel worktrees up to `parallel_limit`.
 - **One-pass send-backs**: QA/architect reports carry a `## Send-back` section (failing procedure ids + exact output, <=40 lines each); the coder reads it directly.
 - **Metrics**: `.bob/metrics.jsonl` (role runs, send-back reasons, approval waits); `python scripts/bob_metrics.py summarize .bob/metrics.jsonl`.
-- **Quality gates, on by default** (`quality_gates.enabled: false` or `quality_gates.gates.<name>: false` to opt out): lint, format, architecture block in the coder's final run and the architect; diff-coverage (>=80) and constitution-traceability block at the merge gate. C# net8+ wiring via `KirillMaster.QualityGates.*` (pet) / `TenenGroup.QualityGates*` (tenengroup remotes).
+- **Quality gates, on by default** (`quality_gates.enabled: false` or `quality_gates.gates.<name>: false` to opt out): lint, format, architecture block in the coder's final run and the architect; diff-coverage (>=80) and constitution-traceability block at the merge gate. C# net8+ wiring via `KirillMaster.QualityGates.*` (pet) / `TenenGroup.QualityGates.Build` + `TenenGroup.ArchitectureRules` (tenengroup remotes).
 - **Mutation never blocks**: the hardener does semantic analysis (unfixed finding = blocking); Stryker/mutmut only with `mutation.framework_enabled: true`, and a low score is a deviation.
 - **Upgrade**: `/plugin update`, then `/bob-init --upgrade`, then `python <plugin>/scripts/upgrade_project.py --project . --steps qg` (`--dry-run` first).
 

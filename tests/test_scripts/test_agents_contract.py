@@ -53,6 +53,6 @@ def test_1_3_contract_hooks():
 
 def test_version_bumped_consistently():
     import json
-    assert json.loads(read(".claude-plugin/plugin.json"))["version"] == "1.3.0"
-    assert json.loads(read(".claude-plugin/marketplace.json"))["plugins"][0]["version"] == "1.3.0"
-    assert read("CHANGELOG.md").startswith("# Changelog\n\n## 1.3.0")
+    assert json.loads(read(".claude-plugin/plugin.json"))["version"] == "1.3.1"
+    assert json.loads(read(".claude-plugin/marketplace.json"))["plugins"][0]["version"] == "1.3.1"
+    assert read("CHANGELOG.md").startswith("# Changelog\n\n## 1.3.1")

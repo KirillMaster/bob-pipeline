@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Fix: tenengroup remotes use `TenenGroup.QualityGates.Build` (0.3.0) and `TenenGroup.ArchitectureRules` (2.0.0); arch package was wrongly `TenenGroup.QualityGates`.
+- `constitution_trace.py` traces NON-NEGOTIABLE principles by `verified_by` (now in the yamlkit schema) and falls back to `gate_condition`.
+
 ## 1.3.0
 
 Design: `docs/design-1.3.0.md` (D16-D24; D1-D15 unchanged).
