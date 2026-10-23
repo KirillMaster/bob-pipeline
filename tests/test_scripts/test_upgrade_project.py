@@ -143,6 +143,17 @@ def test_conflicting_customization_leaves_markers_and_exit_1(tmp_path):
     assert "<<<<<<<" in f.read_text(encoding="utf-8")
 
 
+def test_prefer_new_resolves_conflicts_without_markers(tmp_path):
+    plugin, proj = make_plugin(tmp_path), make_project(tmp_path)
+    f = proj / ".claude" / "agents" / "bob" / "coder.md"
+    f.write_text(f.read_text(encoding="utf-8").replace("Run everything often.", "Run only on Tuesdays."), encoding="utf-8")
+    r = run_cli(proj, plugin, "--steps", "agents", "--prefer-new")
+    assert r.returncode == 0, r.stderr
+    text = f.read_text(encoding="utf-8")
+    assert "<<<<<<<" not in text and "one full run at the end" in text and "Domain: e-commerce" in text
+    assert json.loads(r.stdout)["steps"]["agents"]["files"]["coder.md"]["status"] == "merged-prefer-new"
+
+
 def test_extract_values_multiline_and_line_fallback():
     old = "a {{X}}\nTools:\n{{TOOLS}}\nend {{X}}\n"
     assert up.extract_values(old, "a foo\nTools:\n- t1\n- t2\nend foo\n") == {"X": "foo", "TOOLS": "- t1\n- t2"}

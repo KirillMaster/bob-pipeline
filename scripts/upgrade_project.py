@@ -3,7 +3,7 @@
 
 Usage:
     python scripts/upgrade_project.py --project <dir> [--plugin-root <dir>] [--dry-run]
-        [--steps config,agents,support,untrack] [--old-ref <git-ref> ...]
+        [--steps config,agents,support,untrack] [--old-ref <git-ref> ...] [--prefer-new]
 
 Steps (default: all):
     config   migrate .claude/bob-pipeline.yaml: cleaner -> architect (gates merged, routes
@@ -44,6 +44,7 @@ ALL_STEPS = {"config", "agents", "support", "untrack"}
 # bob-owned local tooling, never tracked in the project repo (design D15)
 BOB_PATHS = [".claude/bob-pipeline.yaml", ".claude/bob-pipeline.yaml.bak-pre-1.2", ".claude/agents/bob/", ".bob/", ".worktrees/"]
 EXCLUDE_HEADER = "# bob-pipeline local files"
+SHARED_KEYS = {"PROJECT_NAME", "DOMAIN", "TECH_STACK"}  # same value in every role copy
 SKIP_DIRS = {".git", "node_modules", "bin", "obj", ".venv", ".worktrees", ".bob"}
 DEPRECATED_ROLES = {"cleaner": "architect"}
 PLACEHOLDER = re.compile(r"\{\{([A-Z_]+)\}\}")
@@ -172,6 +173,8 @@ def migrate_config(config, template_text, registry, project):
     tests = config.get("tests")
     if tests is None:
         tests = {}
+    if not defaults and config.get("stack"):
+        changes.append(f"NOTE tests.*: stack {config['stack']!r} has no single default; set tests.run_command/scoped_command/coverage_command (and integration_command) via /bob-config")
     sln = detect_sln(project)
     for key in ("run_command", "scoped_command", "coverage_command"):
         if key not in tests and key in defaults:
@@ -327,21 +330,21 @@ def extract_values(old_template, project_copy):
     return values
 
 
-def merge_file(ours, base, theirs):
-    """git merge-file -p: returns (text, conflict_count)."""
+def merge_file(ours, base, theirs, prefer_new=False):
+    """git merge-file -p: returns (text, conflict_count). prefer_new resolves conflicting hunks to the new template."""
     with tempfile.TemporaryDirectory() as d:
         paths = []
         for name, text in (("ours", ours), ("base", base), ("theirs", theirs)):
             p = Path(d) / name
             p.write_text(text, encoding="utf-8", newline="")
             paths.append(str(p))
-        r = subprocess.run(["git", "merge-file", "-p", *paths], capture_output=True, text=True, encoding="utf-8")
+        r = subprocess.run(["git", "merge-file", "-p", "-L", "project", "-L", "old-template", "-L", "new-template", *(["--theirs"] if prefer_new else []), *paths], capture_output=True, text=True, encoding="utf-8")
         if r.returncode < 0 or r.returncode > 127:
             raise RuntimeError(r.stderr.strip() or "git merge-file failed")
         return r.stdout, r.returncode
 
 
-def upgrade_agent(project_copy, role, plugin_root, old_refs):
+def upgrade_agent(project_copy, role, plugin_root, old_refs, shared=None, prefer_new=False):
     """Return dict(status, text, conflicts, unresolved, ref)."""
     new_tpl_path = plugin_root / "agents" / f"{role}.md"
     if not new_tpl_path.exists():
@@ -360,16 +363,35 @@ def upgrade_agent(project_copy, role, plugin_root, old_refs):
         return {"status": "no-old-template", "note": f"none of {old_refs} has agents/{role}.md; regenerate manually"}
     _, ref, old, values = best
     base = render(old, values)
-    theirs = render(new_tpl, values)
+    theirs = render(new_tpl, {**{k: v for k, v in (shared or {}).items() if k not in values}, **values})
     text, conflicts = merge_file(project_copy, base, theirs)
+    if conflicts and prefer_new:
+        text, _ = merge_file(project_copy, base, theirs, True)
     unresolved = sorted(set(PLACEHOLDER.findall(text)))
-    return {"status": "conflicts" if conflicts else "merged", "text": text,
-            "conflicts": conflicts, "unresolved": unresolved, "ref": ref}
+    status = "merged" if not conflicts else ("merged-prefer-new" if prefer_new else "conflicts")
+    return {"status": status, "text": text, "conflicts": conflicts, "unresolved": unresolved,
+            "ref": ref, "values": values}
+
+
+def fallback_values(config, role):
+    """Placeholder values derivable from the config when no project copy carries them."""
+    out = {}
+    if config:
+        if config.get("project_name"):
+            out["PROJECT_NAME"] = config["project_name"]
+        if config.get("stack"):
+            out["TECH_STACK"] = config["stack"]
+        if role == "hardener":
+            tools = [f"{t['tool']}: `{t['run_command']}`" for t in config.get("tools", [])
+                     if t.get("category") == "mutation" and t.get("enabled")]
+            if tools:
+                out["TOOLS"] = "; ".join(tools)
+    return out
 
 
 # ── driver ───────────────────────────────────────────────────────────
 
-def run(project, plugin_root, dry_run, steps, old_refs):
+def run(project, plugin_root, dry_run, steps, old_refs, prefer_new=False):
     report = {"dry_run": dry_run, "steps": {}}
     cfg_path = project / ".claude" / "bob-pipeline.yaml"
     config = yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig")) if cfg_path.exists() else None
@@ -393,6 +415,7 @@ def run(project, plugin_root, dry_run, steps, old_refs):
     if "agents" in steps:
         agents_dir = project / ".claude" / "agents" / "bob"
         res = {"files": {}, "removed": []}
+        shared, pending = {}, []
         if agents_dir.is_dir():
             for f in sorted(agents_dir.glob("*.md")):
                 role = f.stem
@@ -402,7 +425,16 @@ def run(project, plugin_root, dry_run, steps, old_refs):
                         f.unlink()
                     continue
                 current = f.read_text(encoding="utf-8")
-                r = upgrade_agent(current, role, plugin_root, old_refs)
+                r = upgrade_agent(current, role, plugin_root, old_refs, {**fallback_values(config, role), **shared}, prefer_new)
+                for k, v in r.get("values", {}).items():
+                    if k in SHARED_KEYS and v:
+                        shared.setdefault(k, v)
+                pending.append((f, role, current, r))
+            for f, role, current, r in pending:
+                effective = {**fallback_values(config, role), **shared}
+                if set(r.get("unresolved", [])) & set(effective):
+                    r = upgrade_agent(current, role, plugin_root, old_refs, effective, prefer_new)
+                r.pop("values", None)
                 text = r.pop("text", None)
                 r["changed"] = text is not None and text != current
                 if r["changed"] and not dry_run:
@@ -458,6 +490,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--steps", default=DEFAULT_STEPS, help="comma list of config,agents,support,untrack (untrack is opt-in)")
     ap.add_argument("--old-ref", action="append", help="git ref(s) of the plugin holding old agent templates")
+    ap.add_argument("--prefer-new", action="store_true", help="resolve conflicting agent hunks to the new template (project edits elsewhere are kept)")
     args = ap.parse_args()
     steps = {s.strip() for s in args.steps.split(",") if s.strip()}
     if not steps <= ALL_STEPS:
@@ -465,7 +498,7 @@ def main():
     project = Path(args.project).resolve()
     if not project.is_dir():
         ap.error(f"project dir not found: {project}")
-    report = run(project, Path(args.plugin_root).resolve(), args.dry_run, steps, args.old_ref or DEFAULT_OLD_REFS)
+    report = run(project, Path(args.plugin_root).resolve(), args.dry_run, steps, args.old_ref or DEFAULT_OLD_REFS, args.prefer_new)
     json.dump(report, sys.stdout, indent=2)
     print()
     conflicts = any(f.get("status") == "conflicts" for f in report["steps"].get("agents", {}).get("files", {}).values())
