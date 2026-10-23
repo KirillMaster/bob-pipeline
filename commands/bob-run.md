@@ -1,6 +1,6 @@
 ---
 description: Run a feature through the Uncle Bob pipeline — Specifier → Coder → Cleaner → Architect → Hardener → QA in an isolated worktree, gauntlet of mechanical gates, merge on pass
-argument-hint: "[\"feature description\"] [skip <roles>] [--night] [--resume]"
+argument-hint: "[\"feature description\"] [skip <roles>] [--night] [--resume] [--one-slice]"
 ---
 
 # /bob-run — run a feature through the pipeline
@@ -15,6 +15,7 @@ Plugin paths below are under `${CLAUDE_PLUGIN_ROOT}`. Config: `.claude/bob-pipel
 - `skip <role>[, <role>...]` / "skipping X" / `skip_roles:` → skip list.
 - `--night` → night mode (also on if `night_mode_default: true` in config).
 - `--resume` → prefer resuming an interrupted run.
+- `--one-slice` → one-slice-per-session mode, see §10. Implies no chat memory: all context comes from state + report files.
 - Inline overrides ("return limit 5") → per-run overrides. **Overrides apply to this run only — never modify the config file.**
 
 **Skip validation (before any work)**: unknown role name → error listing valid roles. `specifier` or `coder` in the skip list → **refuse to start**: "Specifier and Coder are non-skippable: without them there is no approved intent and no implementation." (FR-010)
@@ -106,3 +107,20 @@ Outcome: `completed` (all slices merged) or `completed-with-failures` (some fail
 ## Night mode invariants (FR-012, P7)
 
 Audit before running in night mode: the night path contains **zero** interactive questions. Every day-mode prompt has a defined night behavior: approval → auto-approve+flag; resume prompt → auto-resume; role failure / limit exhausted / stale approval / merge conflict → mark slice failed + diagnosis, continue; no-test-infra → Coder sets it up + deviation.
+
+## 10. One-slice mode (`--one-slice`)
+
+Purpose: keep the orchestrator context small. Each invocation handles **exactly one slice** and exits; `scripts/bob-loop.ps1` re-invokes it in a fresh session. Never rely on chat memory — everything is re-read from disk.
+
+Run-level state: `.bob/run-state.yaml` in the project root (not in a worktree; ignore `.bob/` in the §1.3 dirty check). Fields: `feature`, `run_id`, `base_branch`, `input_checksums`, `slices[]` (`id`, `depends_on`, `status`: `pending|merged|failed|skipped`, `return_count`, `failure`), `deviations[]`, `report`. Per-slice `.bob/state.yaml` in the worktree stays as in §6–§7.
+
+Always night semantics (zero questions, §Night mode invariants). Steps:
+
+1. **Load state.** `.bob/run-state.yaml` missing → fresh run: need `feature_description` (or yamlkit artifacts, §2); run §3 Specifier + §4 (auto-approve) and write `run-state.yaml` with all slices `pending`. Then continue to step 2 in the same invocation. Missing and no feature input → `BOB-LOOP: failed` (reason: no run to resume).
+2. **Pick the slice.** An interrupted worktree (§1.4/§7) takes priority — resume it. Otherwise the first `pending` slice (topological order) whose `depends_on` are all `merged`. Parallelism (§8) is off in this mode.
+3. **Run it:** §5 worktree, §6 role loop, merge (§9 merge step, no final report yet). Update slice `status` (`merged` or `failed` + diagnosis) and `deviations` in `run-state.yaml` immediately after.
+4. **Decide the final line:**
+   - any `pending` slice whose dependencies are all `merged` remains → `BOB-LOOP: next`
+   - nothing runnable remains (all merged, or the rest are blocked by failed/skipped) → assemble the §9 report from `run-state.yaml` + per-slice reports, then `BOB-LOOP: done` (all merged) or `BOB-LOOP: failed` (any failed/blocked slice; report path in the line above)
+   - unrecoverable error (config invalid, dirty tree, stale approval) → `BOB-LOOP: failed`
+5. **Stop.** The very last output line must be exactly `BOB-LOOP: next`, `BOB-LOOP: done` or `BOB-LOOP: failed` — nothing after it. A failed slice does not stop the loop while other independent slices are runnable (`next`).
