@@ -65,6 +65,7 @@ def make_project(tmp_path):
     (proj / ".claude" / "agents" / "bob" / "coder.md").write_text(agent, encoding="utf-8")
     (proj / ".claude" / "agents" / "bob" / "cleaner.md").write_text("cleaner Shop\n", encoding="utf-8")
     (proj / ".gitignore").write_text("bin/\nobj/", encoding="utf-8")
+    git(proj, "init", "-q")
     (proj / ".claude" / "settings.json").write_text(
         json.dumps({"permissions": {"allow": ["Bash(git status:*)"]}, "x": 1}), encoding="utf-8")
     return proj
@@ -86,7 +87,7 @@ def test_dry_run_changes_nothing(tmp_path):
     assert r.returncode == 0, r.stderr
     rep = json.loads(r.stdout)
     assert rep["steps"]["agents"]["removed"] == ["cleaner.md"]
-    assert rep["steps"]["support"]["gitignore_added"]
+    assert rep["steps"]["support"]["exclude_added"]
     assert before == snapshot(proj)
 
 
@@ -114,8 +115,9 @@ def test_full_upgrade(tmp_path):
     assert "never touch Legacy" in agent
     assert not (proj / ".claude" / "agents" / "bob" / "cleaner.md").exists()
 
-    gi = (proj / ".gitignore").read_text(encoding="utf-8")
-    assert ".bob/run-state.yaml" in gi and ".bob/loop-logs/" in gi and gi.startswith("bin/\nobj/\n")
+    assert (proj / ".gitignore").read_text(encoding="utf-8") == "bin/\nobj/"
+    ex = (proj / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+    assert "/.bob/" in ex and "/.claude/agents/bob/" in ex and "/.claude/bob-pipeline.yaml" in ex
     settings = json.loads((proj / ".claude" / "settings.json").read_text(encoding="utf-8"))
     allow = settings["permissions"]["allow"]
     assert allow[0] == "Bash(git status:*)" and settings["x"] == 1
@@ -128,7 +130,7 @@ def test_second_run_is_idempotent(tmp_path):
     snap = snapshot(proj)
     rep = json.loads(run_cli(proj, plugin).stdout)
     assert rep["steps"]["config"]["changes"] == []
-    assert rep["steps"]["support"] == {"gitignore_added": [], "permissions_added": []}
+    assert rep["steps"]["support"] == {"exclude_added": [], "permissions_added": []}
     assert snap == snapshot(proj)
 
 
@@ -153,3 +155,51 @@ def test_command_prefixes():
     assert up.command_prefixes("python -m coverage run -m pytest && python -m coverage xml") == [
         "python -m coverage run -m pytest", "python -m coverage xml"]
     assert up.command_prefixes("npx vitest run --coverage || npx jest --coverage") == ["npx vitest run", "npx jest"]
+
+
+def test_untrack_is_opt_in_and_removes_from_index_only(tmp_path):
+    plugin, proj = make_plugin(tmp_path), make_project(tmp_path)
+    git(proj, "add", "-f", ".claude/bob-pipeline.yaml", ".claude/agents/bob/coder.md")
+    r = run_cli(proj, plugin)
+    assert "untrack" not in json.loads(r.stdout)["steps"]
+    dry = json.loads(run_cli(proj, plugin, "--steps", "untrack", "--dry-run").stdout)
+    assert set(dry["steps"]["untrack"]["untracked"]) == {".claude/bob-pipeline.yaml", ".claude/agents/bob"}
+    assert subprocess.run(["git", "-C", str(proj), "ls-files", ".claude"], capture_output=True, text=True).stdout.strip()
+    rep = json.loads(run_cli(proj, plugin, "--steps", "untrack").stdout)
+    assert rep["steps"]["untrack"]["untracked"]
+    assert not subprocess.run(["git", "-C", str(proj), "ls-files", ".claude/agents", ".claude/bob-pipeline.yaml"],
+                              capture_output=True, text=True).stdout.strip()
+    assert (proj / ".claude" / "bob-pipeline.yaml").exists()
+    assert json.loads(run_cli(proj, plugin, "--steps", "untrack").stdout)["steps"]["untrack"]["untracked"] == []
+
+
+def test_exclude_uses_common_dir_from_worktree(tmp_path):
+    plugin, proj = make_plugin(tmp_path), make_project(tmp_path)
+    git(proj, "commit", "--allow-empty", "-qm", "init")
+    wt = tmp_path / "wt"
+    git(proj, "worktree", "add", str(wt), "-b", "x")
+    run_cli(wt, plugin, "--steps", "support")
+    assert "/.bob/" in (proj / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+
+
+def test_integration_exclusion_added_only_with_integration_command(tmp_path):
+    plugin, proj = make_plugin(tmp_path), make_project(tmp_path)
+    (proj / "Shop.IntegrationTests").mkdir()
+    rep = json.loads(run_cli(proj, plugin, "--steps", "config", "--dry-run").stdout)
+    assert not any("integration exclusion" in c for c in rep["steps"]["config"]["changes"])
+    assert rep["steps"]["config"]["integration_candidates"] == ["Shop.IntegrationTests"]
+    cfg_path = proj / ".claude" / "bob-pipeline.yaml"
+    tests_block = (
+        "tests:\n"
+        "  run_command: dotnet test App.sln\n"
+        "  scoped_command: 'dotnet test App.sln --filter \"{filter}\"'\n"
+        "  integration_command: dotnet test --filter Category=Integration\n"
+        "tools:"
+    )
+    cfg_path.write_text(OLD_CFG.replace("tools:", tests_block), encoding="utf-8")
+    run_cli(proj, plugin, "--steps", "config")
+    t = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))["tests"]
+    assert t["run_command"].endswith('--filter "Category!=Integration"')
+    assert t["scoped_command"].endswith('--filter "({filter})&Category!=Integration"')
+    run_cli(proj, plugin, "--steps", "config")
+    assert yaml.safe_load(cfg_path.read_text(encoding="utf-8"))["tests"] == t

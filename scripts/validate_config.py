@@ -106,6 +106,9 @@ def validate_config(config_path: Path, schema_path: Path, warnings=None) -> list
         for t in targets:
             if canon(t) not in role_names:
                 violations.append({"path": f"send_back_routes/{source}", "message": f"target role '{t}' is not in roles"})
+    tests = config.get("tests") or {}
+    if tests.get("integration_at") and not tests.get("integration_command"):
+        warnings.append({"path": "tests/integration_at", "message": "integration_at is set but integration_command is absent: no integration run happens"})
     enabled_cats = {t["category"] for t in config["tools"] if t["enabled"]}
     if "mutation" not in enabled_cats:
         hardener = next((r for r in config["roles"] if r["name"] == "hardener"), None)

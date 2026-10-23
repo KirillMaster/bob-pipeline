@@ -37,7 +37,7 @@
 ## Deviations
 
 <!-- Every deviation from the default flow — honest reporting (P7). Empty section = none. -->
-- <!-- role skips ("hardener skipped, per-feature override"), degradations ("no mutation tool for stack X — hardener ran heuristics"), night auto-approvals ("Gherkin auto-approved-night at <time>"), exhausted send-back limits, merge conflicts, legacy cleaner treated as architect, worktree cleanup failures -->
+- <!-- role skips ("hardener skipped, per-feature override"), degradations ("no mutation tool for stack X — hardener ran heuristics"), night auto-approvals ("Gherkin auto-approved-night at <time>"), exhausted send-back limits, merge conflicts, legacy cleaner treated as architect, worktree cleanup failures, integration run outcome (merge-gate or run-end) -->
 
 ## Metrics snapshot
 

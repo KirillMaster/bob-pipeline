@@ -9,7 +9,11 @@ You are the **orchestrator**. You spawn role subagents, verify their commits, co
 
 **Context budget (D3)**: from each role return parse ONLY the final JSON line `{"role","slice","verdict","commit","report","diagnosis"}` plus `git log --oneline -5`. Never read report files into your context — pass their paths onward (e.g. qa diagnosis path to coder).
 
-Plugin paths below are under `${CLAUDE_PLUGIN_ROOT}`. Config: `.claude/bob-pipeline.yaml`. Role prompts: `.claude/agents/bob/<role>.md` (instantiated by /bob-init).
+**Runs on top of yamlkit (D13)**: bob-pipeline is the implementation stage of the yamlkit flow (`.specify/`: yamlkit owns spec → plan → tasks, bob owns implementing the tasks). When `.specify/` exists, its artifacts are the input (integration mode, §2) and `.specify/memory/constitution.yaml` is binding. Without `.specify/` bob runs standalone and every constitution rule below is a no-op.
+
+**Main root (D15)**: bob files (`.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/`) are untracked (`.git/info/exclude`), so slice worktrees do not contain them. `<bob_root>` = parent of `git rev-parse --path-format=absolute --git-common-dir` (the MAIN project root, also when you were started inside a worktree). Read the config, role prompts, `.bob/run-state.yaml`, baselines and slice state ONLY from `<bob_root>` — never from a slice worktree. Roles get `bob_root` in their task context and read/write `.bob/` artifacts there by absolute path.
+
+Plugin paths below are under `${CLAUDE_PLUGIN_ROOT}`. Config: `<bob_root>/.claude/bob-pipeline.yaml`. Role prompts: `<bob_root>/.claude/agents/bob/<role>.md` (instantiated by /bob-init).
 
 ## 0. Parse arguments from `$ARGUMENTS`
 
@@ -26,13 +30,15 @@ Plugin paths below are under `${CLAUDE_PLUGIN_ROOT}`. Config: `.claude/bob-pipel
 
 ## 1. Preconditions
 
-1. No `.claude/bob-pipeline.yaml` → **STOP**, outcome `not-initialized`: suggest `/bob-init`.
-2. Validate config (`python ${CLAUDE_PLUGIN_ROOT}/scripts/validate_config.py .claude/bob-pipeline.yaml --schema ${CLAUDE_PLUGIN_ROOT}/schemas/bob-pipeline.schema.json`); invalid → stop, suggest `/bob-config`.
-3. `git status --porcelain` non-empty → **STOP**, outcome `dirty-working-copy`: uncommitted changes prevent a clean worktree base; suggest commit/stash. (EC-3)
-4. **Interrupted run?** Any `.worktrees/bob-*` containing `.bob/state.yaml`, whose branch is NOT merged into the base (`git branch --merged <base>`) and whose state is not `merged` → outcome `interrupted-run-found`: show feature/slice/role position from the state. Day mode: ask resume-or-discard. Night mode or `--resume`: resume automatically. See §7. Discard = remove worktrees + branches of that run.
+1. No `<bob_root>/.claude/bob-pipeline.yaml` → **STOP**, outcome `not-initialized`: suggest `/bob-init`.
+2. Validate config (`python ${CLAUDE_PLUGIN_ROOT}/scripts/validate_config.py <bob_root>/.claude/bob-pipeline.yaml --schema ${CLAUDE_PLUGIN_ROOT}/schemas/bob-pipeline.schema.json`); invalid → stop, suggest `/bob-config`.
+3. `git status --porcelain` non-empty (bob files are excluded, so they never count) → **STOP**, outcome `dirty-working-copy`: uncommitted changes prevent a clean worktree base; suggest commit/stash. (EC-3)
+4. **Interrupted run?** Any `.worktrees/bob-*` with a `<bob_root>/.bob/slices/<slice>/state.yaml`, whose branch is NOT merged into the base (`git branch --merged <base>`) and whose state is not `merged` → outcome `interrupted-run-found`: show feature/slice/role position from the state. Day mode: ask resume-or-discard. Night mode or `--resume`: resume automatically. See §7. Discard = remove worktrees + branches of that run.
 5. No test infrastructure detected → outcome `no-test-infra`: day mode — offer "let Coder set it up" vs stop; night mode — let Coder set it up, record deviation. (EC-1)
 
 ## 2. Input mode (FR-009)
+
+**Constitution (D13)**: if `<bob_root>/.specify/memory/constitution.yaml` exists, pass its path as `constitution: <path>` in EVERY role's task context (else `constitution: none`). Never pass or read `constitution.md` (rendered view). Roles never edit `.specify/`; a `spec-change:` diagnosis is surfaced to the user (day: stop the slice and show it; night: slice `failed`) — the fix is a yamlkit run, not a bob action.
 
 - `feature_description` given → **standalone mode**.
 - No description → look for yamlkit artifacts: `.specify/feature.json` → its feature dir, else newest `specs/*/` containing `spec.yaml|spec.md`. Found (with tasks file) → **integration mode**: Specifier input = spec content + tasks list; slices map 1:1 to task groups preserving `depends_on`; Gherkin scenario ids reuse the spec's story ids. Nothing found → error: ask for a feature description.
@@ -41,7 +47,8 @@ Plugin paths below are under `${CLAUDE_PLUGIN_ROOT}`. Config: `.claude/bob-pipel
 
 Spawn the **specifier** subagent (Agent tool):
 - `model`: from config `roles[specifier].model` — **always pass model explicitly** (frontmatter model is ignored, bug #44385). Label: `bob:specifier [<model>]`.
-- Prompt: `.claude/agents/bob/specifier.md` content + the feature input + where to write (`.bob/features/` in a temp staging dir for now — pre-worktree).
+- Prompt: `.claude/agents/bob/specifier.md` content + the feature input + `bob_root` + `constitution` + where to write: `<bob_root>/.bob/features/` (no worktree exists yet; the specifier makes no commit).
+- Parse the return JSON: besides the common fields it carries `"slices_file"`. Read the slice breakdown from that file (the one small file you may read; path relative to `<bob_root>`), not from the specifier's prose. Missing/unparseable file → role failure.
 
 ## 4. Approval gate (P2, FR-005)
 
@@ -59,28 +66,29 @@ Follow `${CLAUDE_PLUGIN_ROOT}/templates/worktree-merge.md` exactly. Per slice re
 git worktree add .worktrees/bob-<feature>-<slice> -b bob/<feature>/<slice> <base>
 ```
 
-`<base>` = user's branch head (or post-merge head of the last predecessor for dependent slices). Seed `.bob/features/`, `.bob/state.yaml` (from `templates/state.yaml`), and baselines.
+`<base>` = user's branch head (or post-merge head of the last predecessor for dependent slices). Per-slice state goes to `<bob_root>/.bob/slices/<slice>/state.yaml` (from `templates/state.yaml`); nothing is seeded into the worktree.
 
-**Baselines (EC-7)**: if `.bob/baselines.json` doesn't exist in the project, capture now: run the configured complexity/duplication tools on the base, parse via `parse_reports.py`, store `{"complexity": <max_ccn>, "duplication": <pct>}`.
+**Baselines (EC-7)**: if `<bob_root>/.bob/baselines.json` doesn't exist, capture now: run the configured complexity/duplication tools on the base, parse via `parse_reports.py`, store `{"complexity": <max_ccn>, "duplication": <pct>}`.
 
 ## 6. Role loop (per slice)
 
 For each enabled role in config order, minus this run's skip list (skipped slices get `skipped_roles` recorded):
 
-1. Update `.bob/state.yaml`: `current_slice`, `current_role`. **State is written at every role boundary.**
-2. Spawn the role subagent: explicit `model` from config, label `bob:<role>:<slice> [<model>]`, cwd = the slice worktree. Context: role prompt + slice (id, title, scenario_refs) + approved feature/QA file paths + tool commands and thresholds from config + (if send-back) the diagnosis and report path.
-3. On return parse the JSON line and **verify the labeled commit** (`git log --oneline -5` contains `bob(<role>): <slice>`). Missing → one retry instructing the agent to commit; still missing → role failure (day: ask the user; night: mark the slice `failed`, continue).
-4. **Compute gates** (P1) for the role's tools: `python ${CLAUDE_PLUGIN_ROOT}/scripts/compute_gates.py --config .claude/bob-pipeline.yaml --role <role> --metrics <metrics.json> --baselines .bob/baselines.json --tests-exit <exit> [--traceability <trace.json>]`. `metrics.json` = `parse_reports.py` output on the role's tool reports. Append GateResults to the run's collection.
-   - **Merge gate (D2/D4)**: after qa passes, before merge, run exactly ONE full suite in the slice worktree: `tests.coverage_command` if present, else `tests.run_command`. `--tests-exit` and the coverage metric for the final compute_gates come from this run only — never from role claims. No other full-suite or standalone coverage runs by you.
+1. Update the slice's `state.yaml`: `current_slice`, `current_role`. **State is written at every role boundary.**
+2. Spawn the role subagent: explicit `model` from config, label `bob:<role>:<slice> [<model>]`, cwd = the slice worktree. Context: role prompt + `bob_root` + `constitution` + slice (id, title, scenario_refs) + approved feature/QA file paths (absolute, under `<bob_root>/.bob/features/`) + tool commands and thresholds from config + (if send-back) the diagnosis and report path.
+3. On return parse the JSON line and **verify the labeled commit** (`git log --oneline -5` contains `bob(<role>): <slice>`; roles use `--allow-empty` when they only produced bob artifacts). Missing → one retry instructing the agent to commit; still missing → role failure (day: ask the user; night: mark the slice `failed`, continue).
+4. **Compute gates** (P1) for the role's tools: `python ${CLAUDE_PLUGIN_ROOT}/scripts/compute_gates.py --config <bob_root>/.claude/bob-pipeline.yaml --role <role> --metrics <metrics.json> --baselines <bob_root>/.bob/baselines.json --tests-exit <exit> [--traceability <trace.json>]`. `metrics.json` = `parse_reports.py` output on the role's tool reports. Append GateResults to the run's collection.
+   - **Merge gate (D2/D4/D14)**: after qa passes, before merge, in the slice worktree run exactly ONE fast full suite (`tests.coverage_command` if present, else `tests.run_command`) and, when `tests.integration_command` is set and `tests.integration_at` is `merge-gate` (default), exactly ONE integration run. `--tests-exit` is non-zero if either failed; the coverage metric comes from the fast run only — never from role claims. No other full-suite, integration or standalone coverage runs by you; no role ever runs integration tests. Integration failure → treat as a mechanical `tests-green` failure (one in-place repair by `coder` with the diagnosis, then the gate once more).
 5. **Route failures** (FR-013):
    - **Mechanical gate failed** (mutation-score, complexity/duplication-baseline, tests-green): re-spawn the SAME role once with the gate diagnosis — in-place repair. Still failing after the repair attempt → treat like a semantic failure below.
+   - **Constitution (D13)**: a `send-back` with diagnosis `constitution:<principle id>` is a normal semantic send-back to `coder` (counts toward `return_limit`). Diagnosis `spec-change:` → not routable: see §2. `recommended`-principle findings are only deviations.
    - **Semantic verdict `send-back`** (architect or qa): Diagnosis `naming` (qa `procedure-not-executable`: test name/path mismatch) → route to coder (or specifier to fix `.qa.md`), does NOT increment `return_count`. Otherwise increment the slice's `return_count`. Over `return_limit` → day: stop the slice, show the diagnosis chain, ask the user; night: mark slice `failed` with the diagnosis, continue with other slices. Within limit → route per config `send_back_routes` (qa→coder; architect→coder as the verdict names; target `cleaner`→`architect`), then continue forward again from the target role.
    - Checksums of approved artifacts changed mid-run (check at each boundary) → outcome `stale-approval`: list changed artifacts, require re-approval (day) / mark slice failed (night). (EC-9)
 
 ## 7. Resume (FR-019, EC-5)
 
 On resume of an interrupted run:
-1. Read `.bob/state.yaml` from the worktree(s).
+1. Read `<bob_root>/.bob/slices/<slice>/state.yaml` for the unfinished slice(s).
 2. Recompute input checksums. Mismatch → outcome `stale-approval` (re-approval required; night: slice failed).
 3. Match → find the last verified `bob(<role>)` commit on the slice branch; continue the role loop from the **next** role. Completed roles are never repeated. Note the resume in the report.
 
@@ -100,7 +108,9 @@ Assemble the final report from `${CLAUDE_PLUGIN_ROOT}/templates/run-report.md` i
 - **deviations** — every skip, degradation, auto-approval, exhausted limit, merge conflict, resume (P7);
 - metrics snapshot (baseline → after).
 
-Outcome: `completed` (all slices merged) or `completed-with-failures` (some failed/skipped — only passing slices merged). Present the report to the user (day) / leave it as the morning report (night: surface the path + summary as the final message).
+**Run-end integration (D14)**: `tests.integration_at: run-end` with `tests.integration_command` set → after the last slice is merged, run the integration suite once on the base branch; failure → outcome `completed-with-failures` + diagnosis in the report, no auto-revert. (In `--one-slice` mode this happens in the invocation that merges the last slice.)
+
+Outcome: `completed` (all slices merged) or `completed-with-failures` (some failed/skipped, or the run-end integration run failed — only passing slices merged). Present the report to the user (day) / leave it as the morning report (night: surface the path + summary as the final message).
 
 ## Night mode invariants (FR-012, P7)
 
@@ -110,8 +120,8 @@ Audit before running in night mode: the night path contains **zero** interactive
 
 Purpose: keep the orchestrator context small. Each invocation handles **exactly one slice** and exits; `scripts/bob-loop.ps1` re-invokes it in a fresh session. Never rely on chat memory — everything is re-read from disk.
 
-Run-level state: `.bob/run-state.yaml` in the project root (not in a worktree; ignore `.bob/` in the §1.3 dirty check). Fields: `feature`, `run_id`, `base_branch`, `input_checksums`, `slices[]` (`id`, `depends_on`, `status`: `pending|merged|failed|skipped`, `return_count`, `failure`), `deviations[]`, `report`. 
-Writes to `run-state.yaml` and `.bob/state.yaml` are atomic (write temp file + rename). Always night semantics (zero questions, §Night mode invariants). Steps:
+Run-level state: `<bob_root>/.bob/run-state.yaml` (the main root, never a worktree). Fields: `feature`, `run_id`, `base_branch`, `input_checksums`, `slices[]` (`id`, `depends_on`, `status`: `pending|merged|failed|skipped`, `return_count`, `failure`), `deviations[]`, `report`. 
+Writes to `run-state.yaml` and the slice `state.yaml` files are atomic (write temp file + rename). Always night semantics (zero questions, §Night mode invariants). Steps:
 
 0. **Idempotency (D8).** For every slice not yet `merged`: if `bob/<feature>/<slice>` is in `git branch --merged <base>`, set it `merged` in `run-state.yaml` (clean up leftover worktree/branch per merge protocol) and skip it.
 1. **Load state.** `.bob/run-state.yaml` missing → fresh run: need `feature_description` (or yamlkit artifacts, §2); run §3 Specifier + §4 (auto-approve) and write `run-state.yaml` with all slices `pending`. Then continue to step 2 in the same invocation. Missing and no feature input → `BOB-LOOP: failed` (reason: no run to resume).

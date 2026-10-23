@@ -67,7 +67,9 @@
       "properties": {
         "run_command": { "type": "string", "minLength": 1 },
         "scoped_command": { "type": "string", "pattern": "[{]filter[}]" },
-        "coverage_command": { "type": "string", "minLength": 1 }
+        "coverage_command": { "type": "string", "minLength": 1 },
+        "integration_command": { "type": "string", "minLength": 1 },
+        "integration_at": { "type": "string", "enum": ["merge-gate", "run-end"] }
       }
     },
     "role": {

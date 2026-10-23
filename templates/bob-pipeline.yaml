@@ -34,27 +34,45 @@ roles:
     enabled: true
     gates: [tests-green, gherkin-traceability]
 
-# Test commands. run_command: coder's final run and the orchestrator's merge gate (the only
-# full-suite run after qa). scoped_command ({filter} = test filter expression): architect;
+# Test commands. run_command / scoped_command / coverage_command are the FAST suite and must
+# exclude integration tests (per-stack exclusion below). run_command: coder's final run and the
+# orchestrator's merge gate. scoped_command ({filter} = test filter expression): architect;
 # absent -> build only. coverage_command: merge gate only; absent -> run_command.
+# integration_command: integration suite, run exactly once by the orchestrator (no role runs it):
+# in the merge gate (integration_at: merge-gate, default) or once after the last merge on the
+# base branch (integration_at: run-end). Absent -> no integration run.
 # Coverage is never a standalone run. Filled by /bob-init from the per-stack defaults below
 # ({sln} = detected solution/project file); `#@ <stack>.<key> = <command>` lines are machine-read.
+# `exclude_integration` is appended to run/coverage commands (scoped: see its own default) when
+# integration tests exist; integration tests are marked Category=Integration / @pytest.mark.integration /
+# an `integration` path / JUnit tag `integration`.
 #@ csharp.run_command = dotnet test {sln}
 #@ csharp.scoped_command = dotnet test {sln} --filter "{filter}"
 #@ csharp.coverage_command = dotnet test {sln} --collect:"XPlat Code Coverage"
+#@ csharp.exclude_integration = --filter "Category!=Integration"
+#@ csharp.scoped_exclude_integration = --filter "({filter})&Category!=Integration"
+#@ csharp.integration_command = dotnet test {sln} --filter "Category=Integration"
 #@ typescript.run_command = npm test
 #@ typescript.scoped_command = npm test -- {filter}
 #@ typescript.coverage_command = npm test -- --coverage
+#@ typescript.exclude_integration = --testPathIgnorePatterns integration
+#@ typescript.integration_command = npm test -- --testPathPattern integration
 #@ python.run_command = python -m pytest
 #@ python.scoped_command = python -m pytest -k "{filter}"
 #@ python.coverage_command = python -m pytest --cov --cov-report=xml
+#@ python.exclude_integration = -m "not integration"
+#@ python.integration_command = python -m pytest -m integration
 #@ java.run_command = mvn test
 #@ java.scoped_command = mvn test -Dtest="{filter}"
 #@ java.coverage_command = mvn test jacoco:report
+#@ java.exclude_integration = -DexcludedGroups=integration
+#@ java.integration_command = mvn test -Dgroups=integration
 tests:
   run_command: '{{TESTS_RUN_COMMAND}}'
   scoped_command: '{{TESTS_SCOPED_COMMAND}}'
   coverage_command: '{{TESTS_COVERAGE_COMMAND}}'
+  # integration_command: '<integration suite>'   # bob-init uncomments when integration tests are detected
+  # integration_at: merge-gate                   # merge-gate | run-end
 
 # Frozen tool selection — filled by /bob-init from registry/tool-registry.yaml
 # (or from confirmed web research for stacks outside the registry).

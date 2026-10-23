@@ -76,12 +76,22 @@ All defaults (roles, models, thresholds, routes, per-stack test commands) live i
 | `thresholds.coverage_policy` | `informational` | never blocks |
 | `thresholds.complexity_policy` / `duplication_policy` | `not-worse-than-baseline` | first run captures the baseline |
 | `send_back_routes` | see template | the only backward edges |
-| `tests.run_command` | per stack | coder's final run and the orchestrator's single merge-gate full-suite run |
+| `tests.run_command` | per stack | FAST suite (excludes integration tests): coder's final run and the orchestrator's single merge-gate full-suite run |
 | `tests.scoped_command` | per stack | architect's scoped run; must contain `{filter}`; absent = build only |
 | `tests.coverage_command` | per stack | merge-gate run only (coverage is never a standalone run); absent = `run_command` |
+| `tests.integration_command` | absent | integration suite; run once by the orchestrator only — never by a role. Absent = no integration run |
+| `tests.integration_at` | `merge-gate` | `merge-gate` (in each slice's merge gate) or `run-end` (once after the last merge; failure = `completed-with-failures`) |
 | `return_limit` / `parallel_limit` | `3` / `3` | send-back budget per slice / concurrent slices |
 | `night_mode_default` | `false` | make every run a night run |
 | `bdd_framework` | none | optional: `reqnroll` / `cucumber-js` / `behave`; default is a plain Gherkin doc + test tags (`[Trait("scenario","S1-AS1")]`, `describe('@S1-AS1')`, `@pytest.mark.scenario("S1-AS1")`, `@Tag("S1-AS1")`) |
+
+## yamlkit, the constitution, and local files
+
+bob-pipeline runs on top of yamlkit: with `.specify/` present, `/bob-run` uses its spec/tasks as input and passes `.specify/memory/constitution.yaml` to every role (never `constitution.md`). NON-NEGOTIABLE violations: architect/qa `send-back` with diagnosis `constitution:<id>`; `recommended` ones are deviations. Roles never edit `.specify/` — a needed change comes back as `spec-change:` for you to run in yamlkit. No constitution file = rules are a no-op.
+
+Integration tests run only at the last step (`tests.integration_command`); the fast `run_command` excludes them (per-stack filter in the template), and QA procedures needing them are tagged `@integration`.
+
+Bob files are never committed: `/bob-init` and upgrade write them to `.git/info/exclude`, not `.gitignore`. Because worktrees do not contain them, the orchestrator reads config, agents and run state from the main root (`.bob/slices/<slice>/` for per-slice state).
 
 ## Upgrading a 1.0/1.1 project
 
@@ -90,7 +100,7 @@ All defaults (roles, models, thresholds, routes, per-stack test commands) live i
 /bob-init --upgrade             # apply
 ```
 
-Backend: `python scripts/upgrade_project.py --project <dir> [--dry-run] [--steps config,agents,support] [--old-ref <ref>]`. It migrates the config (cleaner -> architect, adds `tests.*` and `scope_flag`; backup `bob-pipeline.yaml.bak-pre-1.2`), 3-way merges `.claude/agents/bob/*.md` with `git merge-file` (base = old plugin template from this repo's git history rendered with the values recovered from your copy, ours = your copy, theirs = new template), deletes `cleaner.md`, appends `.bob` runtime entries to `.gitignore` and merges `permissions.allow` into `.claude/settings.json`. Exit 1 = conflict markers left in agent files.
+Backend: `python scripts/upgrade_project.py --project <dir> [--dry-run] [--steps config,agents,support,untrack] [--old-ref <ref>]` (default steps: `config,agents,support`; `untrack` is opt-in). It migrates the config (cleaner -> architect, adds `tests.*` and `scope_flag`; backup `bob-pipeline.yaml.bak-pre-1.2`), 3-way merges `.claude/agents/bob/*.md` with `git merge-file` (base = old plugin template from this repo's git history rendered with the values recovered from your copy, ours = your copy, theirs = new template), deletes `cleaner.md`, writes the bob files to `.git/info/exclude` and merges `permissions.allow` into `.claude/settings.json`; adds the integration-exclusion filter to the test commands when `tests.integration_command` is set. `--steps untrack` runs `git rm -r --cached` on tracked bob files (files stay on disk, nothing is committed — commit the removal yourself). Config-only project (no agent copies): `--steps config,support`. Exit 1 = conflict markers left in agent files.
 
 ## Troubleshooting (outcomes you may see)
 

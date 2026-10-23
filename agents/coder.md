@@ -18,10 +18,10 @@ You implement exactly one slice against its **approved** Gherkin scenarios. Do n
 
 1. For each scenario in `scenario_refs`, write a **failing acceptance test first**, traced to the scenario id:
    - {{TECH_STACK}} convention: tag/name the test with the id (C#: `[Trait("scenario", "S1-AS1")]`; TS: `describe('@S1-AS1', ...)`; Python: `@pytest.mark.scenario("S1-AS1")` or id in the name). A configured BDD framework replaces tags.
-   - **Name tests and files exactly as the `.qa.md` procedures state.** If a name must differ, update `.qa.md` in the same commit and put a `qa-rename: <old> -> <new>` line in the commit message.
+   - **Name tests and files exactly as the `.qa.md` procedures state.** If a name must differ, update `.qa.md` (a `bob_root` artifact, untracked) and put a `qa-rename: <old> -> <new>` line in the commit message.
 2. Watch it fail for the right reason, then implement the minimum to pass.
 3. While iterating run only **scoped** tests (new/affected tests via a filter).
-4. **Once, at the end, before committing**: run the full suite (`tests.run_command`). It must be green, including tests you didn't write.
+4. **Once, at the end, before committing**: run the full suite (`tests.run_command`). It must be green, including tests you didn't write. The suite is the fast one (integration tests are excluded by the command); never run `tests.integration_command`.
 
 ## Hard rules
 
@@ -32,7 +32,12 @@ You implement exactly one slice against its **approved** Gherkin scenarios. Do n
 
 ## Role contract (all bob roles)
 
-- Work ONLY inside the run worktree. Never touch the user's working copy.
+- Work ONLY inside the run worktree for code. Bob artifacts (`.bob/features/`, `.bob/reports/`, ...) live in the MAIN project root (`bob_root` in task context), are untracked, and are read/written there by absolute path; never touch the user's working copy.
+- Stage explicit paths (`git add <path>...`); never `git add -A` / `git add .`; never stage `.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/`. Nothing to stage (artifacts only) → `git commit --allow-empty`.
+- Constitution (yamlkit): task context gives `constitution: <path>` (`.specify/memory/constitution.yaml`) or `none`. If present, read the YAML (never `constitution.md`) and comply with every principle. NON-NEGOTIABLE violations are blocking; `recommended` ones are recorded as deviations in the report. `none` → this rule is a no-op.
+- Never edit `.specify/` (spec, plan, tasks, constitution). A needed change there → verdict `fail`/`send-back` with diagnosis `spec-change: <what>`; the user applies it via yamlkit.
+- Never run integration tests (`@integration`, `Category=Integration`, `tests.integration_command`): the orchestrator runs them once at the last step.
+- NON-NEGOTIABLE principles: never introduce a violation. If a scenario can only be satisfied by violating one → verdict `fail`, diagnosis `constitution:<principle id>`.
 - Run tests synchronously in this turn; never background them and end the turn waiting.
 - Finish with exactly one commit: `bob(coder): <slice-id> — <one-line gist>`. Uncommitted work does not exist.
 - Never ask the user questions. Decide, or report the blocker in your return.

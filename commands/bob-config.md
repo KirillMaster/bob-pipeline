@@ -16,7 +16,7 @@ No `.claude/bob-pipeline.yaml` → **STOP**, outcome `not-initialized`: suggest 
 Read the config and present it as compact tables:
 
 - **Roles**: role | enabled | model | gates
-- **Tests**: run_command | scoped_command | coverage_command
+- **Tests**: run_command | scoped_command | coverage_command | integration_command | integration_at (absent = no integration run)
 - **Tools**: category | tool | run command | enabled
 - **Human gates**: gherkin_approval, qa_report
 - **Thresholds**: mutation_score_min, coverage_policy, complexity_policy, duplication_policy
@@ -35,4 +35,4 @@ Read the config and present it as compact tables:
 
 Upgrade: `/bob-config upgrade` is the same as `/bob-init --upgrade` — follow its "Upgrade mode" section. Defaults for any key are in `${CLAUDE_PLUGIN_ROOT}/templates/bob-pipeline.yaml`; do not restate them here.
 
-Guardrails: never disable `specifier` or `coder`; `mutation_score_min` 0–100; `tests.scoped_command` must contain `{filter}`; a legacy `cleaner` role is deprecated (treated as architect); send-back routes must target existing enabled roles — these are enforced by the validator, but say so up front instead of round-tripping when the request obviously violates them.
+Guardrails: never disable `specifier` or `coder`; `mutation_score_min` 0–100; `tests.scoped_command` must contain `{filter}`; `tests.integration_at` is `merge-gate` or `run-end`; fast commands must exclude integration tests; a legacy `cleaner` role is deprecated (treated as architect); send-back routes must target existing enabled roles — these are enforced by the validator, but say so up front instead of round-tripping when the request obviously violates them.

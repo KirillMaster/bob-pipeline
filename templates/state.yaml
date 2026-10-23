@@ -1,4 +1,4 @@
-# RunState — .bob/state.yaml inside the run worktree. Updated by the orchestrator
+# RunState — <main root>/.bob/slices/<slice>/state.yaml (bob files are untracked, so never inside a slice worktree; D15). Updated by the orchestrator
 # at every role boundary (atomic write: temp file + rename); used to detect and resume interrupted runs (EC-5).
 run_id: "{{FEATURE}}-{{STAMP}}"
 feature: "{{FEATURE}}"

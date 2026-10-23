@@ -3,20 +3,25 @@
 
 Usage:
     python scripts/upgrade_project.py --project <dir> [--plugin-root <dir>] [--dry-run]
-        [--steps config,agents,support] [--old-ref <git-ref> ...]
+        [--steps config,agents,support,untrack] [--old-ref <git-ref> ...]
 
 Steps (default: all):
     config   migrate .claude/bob-pipeline.yaml: cleaner -> architect (gates merged, routes
              rewritten), add tests.* from the template's per-stack defaults, add scope_flag
-             to mutation tools. The old file is kept as bob-pipeline.yaml.bak-pre-1.2
+             to mutation tools, and (only when tests.integration_command is set) the stack's
+            integration-exclusion filter to run/coverage/scoped commands. The old file is kept as bob-pipeline.yaml.bak-pre-1.2
              (comments are not preserved by the rewrite).
     agents   3-way regenerate .claude/agents/bob/*.md: base = old plugin template (from git
              history of the plugin, see --old-ref) rendered with the placeholder values
              recovered from the project copy; ours = project copy; theirs = new template
              rendered with the same values. Merged with `git merge-file`; conflicts are left
              as markers and reported. Removes agents/bob/cleaner.md.
-    support  add .gitignore entries for .bob runtime files and merge permissions.allow for the
-             configured commands into .claude/settings.json (existing entries are kept).
+    support  add the bob files to .git/info/exclude (local, shared by all worktrees; never
+             .gitignore, design D15) and merge permissions.allow for the configured commands
+             into .claude/settings.json (existing entries are kept).
+    untrack  OPT-IN (not in the default steps): `git rm -r --cached` the bob files when they are
+             tracked in the project repo. Files stay on disk; nothing is committed — the caller
+             commits the removal.
 
 Output: JSON report on stdout. Exit 0 ok; 1 when agent merges left conflicts; 2 usage error.
 """
@@ -33,9 +38,13 @@ from pathlib import Path
 import yaml
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OLD_REFS = ["v1.1.0", "3456188", "v1.0.0", "d7caca1"]
-GITIGNORE_ENTRIES = [".bob/run-state.yaml", ".bob/state.yaml", ".bob/loop-logs/", ".worktrees/"]
-GITIGNORE_HEADER = "# bob-pipeline runtime files"
+DEFAULT_OLD_REFS = ["v1.2.0", "v1.1.0", "3456188", "v1.0.0", "d7caca1"]
+DEFAULT_STEPS = "config,agents,support"
+ALL_STEPS = {"config", "agents", "support", "untrack"}
+# bob-owned local tooling, never tracked in the project repo (design D15)
+BOB_PATHS = [".claude/bob-pipeline.yaml", ".claude/bob-pipeline.yaml.bak-pre-1.2", ".claude/agents/bob/", ".bob/", ".worktrees/"]
+EXCLUDE_HEADER = "# bob-pipeline local files"
+SKIP_DIRS = {".git", "node_modules", "bin", "obj", ".venv", ".worktrees", ".bob"}
 DEPRECATED_ROLES = {"cleaner": "architect"}
 PLACEHOLDER = re.compile(r"\{\{([A-Z_]+)\}\}")
 
@@ -61,6 +70,50 @@ def detect_sln(project):
 
 def fill_sln(command, sln):
     return command.replace("{sln}", sln) if sln else command.replace(" {sln}", "")
+
+
+def add_integration_exclusion(command, key, defaults):
+    """Append the stack's integration-exclusion filter; None when not applicable or already present."""
+    flag = defaults.get("exclude_integration")
+    if not command or not flag:
+        return None
+    marker = flag.split()[0]
+    if key == "scoped_command":
+        scoped = defaults.get("scoped_exclude_integration")
+        if not scoped or "Category!=Integration" in command:
+            return None
+        # only the exact template shape is rewritten; anything custom is left alone
+        template_filter = '--filter "{filter}"'
+        if template_filter in command and "--filter" in scoped:
+            return command.replace(template_filter, scoped)
+        return None
+    if "integration" in command.lower():
+        return None
+    if marker in command or (marker == "--filter" and "--filter" in command) or (marker == "-m" and " -m " in command):
+        return None
+    return f"{command} {flag}"
+
+
+def find_integration_candidates(project, limit=5):
+    """Cheap hint for /bob-init and the upgrade report: paths with 'integration' in their name."""
+    found = []
+    stack = [project]
+    while stack and len(found) < limit:
+        d = stack.pop()
+        try:
+            entries = sorted(d.iterdir())
+        except OSError:
+            continue
+        for e in entries:
+            if e.name in SKIP_DIRS:
+                continue
+            if "integration" in e.name.lower() and (e.is_dir() or e.suffix in (".csproj", ".py", ".ts", ".js", ".java", ".cs")):
+                found.append(str(e.relative_to(project)).replace("\\", "/"))
+                if len(found) >= limit:
+                    break
+            elif e.is_dir():
+                stack.append(e)
+    return found
 
 
 # ── config migration ─────────────────────────────────────────────────
@@ -124,6 +177,12 @@ def migrate_config(config, template_text, registry, project):
         if key not in tests and key in defaults:
             tests[key] = fill_sln(defaults[key], sln)
             changes.append(f"tests.{key}: added from template defaults")
+    if tests.get("integration_command"):
+        for key in ("run_command", "coverage_command", "scoped_command"):
+            new = add_integration_exclusion(tests.get(key), key, defaults)
+            if new and new != tests[key]:
+                tests[key] = new
+                changes.append(f"tests.{key}: integration exclusion filter added")
     if tests:
         config["tests"] = tests
     for tool in config.get("tools", []):
@@ -137,11 +196,30 @@ def migrate_config(config, template_text, registry, project):
     return config, changes
 
 
-# ── support: gitignore + permissions ─────────────────────────────────
+# ── support: local exclude + permissions ─────────────────────────────
 
-def gitignore_additions(text):
+def git_common_dir(project):
+    r = subprocess.run(["git", "-C", str(project), "rev-parse", "--git-common-dir"],
+                       capture_output=True, text=True, encoding="utf-8")
+    if r.returncode != 0:
+        return None
+    d = Path(r.stdout.strip())
+    return d if d.is_absolute() else (project / d).resolve()
+
+
+def exclude_additions(text):
     present = {ln.strip() for ln in text.splitlines()}
-    return [e for e in GITIGNORE_ENTRIES if e not in present]
+    return [f"/{p}" for p in BOB_PATHS if f"/{p}" not in present]
+
+
+def tracked_bob_paths(project):
+    out = []
+    for p in BOB_PATHS:
+        r = subprocess.run(["git", "-C", str(project), "ls-files", "--", p.rstrip("/")],
+                           capture_output=True, text=True, encoding="utf-8")
+        if r.returncode == 0 and r.stdout.strip():
+            out.append(p.rstrip("/"))
+    return out
 
 
 def command_prefixes(command):
@@ -307,6 +385,10 @@ def run(project, plugin_root, dry_run, steps, old_refs):
                 shutil.copyfile(cfg_path, cfg_path.with_name("bob-pipeline.yaml.bak-pre-1.2"))
                 cfg_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
             report["steps"]["config"] = {"changes": changes}
+            if not config.get("tests", {}).get("integration_command"):
+                hint = find_integration_candidates(project)
+                if hint:
+                    report["steps"]["config"]["integration_candidates"] = hint
 
     if "agents" in steps:
         agents_dir = project / ".claude" / "agents" / "bob"
@@ -332,13 +414,19 @@ def run(project, plugin_root, dry_run, steps, old_refs):
 
     if "support" in steps:
         res = {}
-        gi = project / ".gitignore"
-        gi_text = gi.read_text(encoding="utf-8") if gi.exists() else ""
-        add = gitignore_additions(gi_text)
-        res["gitignore_added"] = add
-        if add and not dry_run:
-            sep = "" if not gi_text or gi_text.endswith("\n") else "\n"
-            gi.write_text(gi_text + sep + GITIGNORE_HEADER + "\n" + "\n".join(add) + "\n", encoding="utf-8")
+        common = git_common_dir(project)
+        if common is None:
+            res["exclude_added"] = []
+            res["exclude_skipped"] = "not a git repo"
+        else:
+            ex = common / "info" / "exclude"
+            ex_text = ex.read_text(encoding="utf-8") if ex.exists() else ""
+            add = exclude_additions(ex_text)
+            res["exclude_added"] = add
+            if add and not dry_run:
+                ex.parent.mkdir(parents=True, exist_ok=True)
+                sep = "" if not ex_text or ex_text.endswith("\n") else "\n"
+                ex.write_text(ex_text + sep + EXCLUDE_HEADER + "\n" + "\n".join(add) + "\n", encoding="utf-8")
         settings_path = project / ".claude" / "settings.json"
         if config is not None:
             settings = json.loads(settings_path.read_text(encoding="utf-8-sig")) if settings_path.exists() else {}
@@ -350,6 +438,16 @@ def run(project, plugin_root, dry_run, steps, old_refs):
         else:
             res["permissions_added"] = []
         report["steps"]["support"] = res
+
+    if "untrack" in steps:
+        tracked = tracked_bob_paths(project)
+        res = {"untracked": tracked, "note": "commit the removal yourself; files stay on disk"}
+        if tracked and not dry_run:
+            r = subprocess.run(["git", "-C", str(project), "rm", "-r", "--cached", "-f", "-q", "--", *tracked],
+                               capture_output=True, text=True, encoding="utf-8")
+            if r.returncode != 0:
+                res["error"] = r.stderr.strip()
+        report["steps"]["untrack"] = res
     return report
 
 
@@ -358,12 +456,12 @@ def main():
     ap.add_argument("--project", required=True)
     ap.add_argument("--plugin-root", default=str(PLUGIN_ROOT))
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--steps", default="config,agents,support")
+    ap.add_argument("--steps", default=DEFAULT_STEPS, help="comma list of config,agents,support,untrack (untrack is opt-in)")
     ap.add_argument("--old-ref", action="append", help="git ref(s) of the plugin holding old agent templates")
     args = ap.parse_args()
     steps = {s.strip() for s in args.steps.split(",") if s.strip()}
-    if not steps <= {"config", "agents", "support"}:
-        ap.error("--steps must be a subset of config,agents,support")
+    if not steps <= ALL_STEPS:
+        ap.error("--steps must be a subset of config,agents,support,untrack")
     project = Path(args.project).resolve()
     if not project.is_dir():
         ap.error(f"project dir not found: {project}")

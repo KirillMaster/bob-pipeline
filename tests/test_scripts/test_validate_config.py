@@ -170,3 +170,23 @@ def test_registry_mutation_without_scope_flag_rejected(tmp_path):
     f.write_text("entries:\n  - {stack: any, category: mutation, tool: x, run_command: x, report_parser: stryker, enabled: true}\n", encoding="utf-8")
     r = run("--registry", str(f))
     assert r.returncode == 1 and "scope_flag" in r.stderr
+
+
+def test_integration_keys_accepted(tmp_path):
+    def add(t):
+        return t.replace("  # integration_command: '<integration suite>'", "  integration_command: 'dotnet test --filter Category=Integration'") \
+                .replace("  # integration_at: merge-gate", "  integration_at: run-end")
+    r = run(str(make_config(tmp_path, add)))
+    assert r.returncode == 0, r.stderr
+
+
+def test_integration_at_invalid_value_rejected(tmp_path):
+    def add(t):
+        return t.replace("  # integration_at: merge-gate", "  integration_at: nightly")
+    r = run(str(make_config(tmp_path, add)))
+    assert r.returncode == 1
+
+
+def test_integration_at_without_command_warns(tmp_path):
+    r = run(str(make_config(tmp_path, lambda t: t.replace("  # integration_at: merge-gate", "  integration_at: run-end"))))
+    assert r.returncode == 0 and "integration_command" in r.stderr

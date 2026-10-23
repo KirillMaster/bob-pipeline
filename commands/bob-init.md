@@ -13,7 +13,7 @@ Plugin files referenced below live under `${CLAUDE_PLUGIN_ROOT}` (registry, temp
 
 1. `.claude/bob-pipeline.yaml` already exists → **STOP** with outcome `already-initialized`: show the config path, suggest `/bob-config` for changes. Never overwrite.
 2. `git rev-parse --git-dir` fails → **STOP** with outcome `not-a-git-repo`: the pipeline requires git (worktrees, per-role commits); suggest `git init`.
-3. Detect test infrastructure (a test runner config / test project). Missing → record a warning for the final `warnings[]`; do not stop (Coder can set it up during the first run).
+3. Detect test infrastructure (a test runner config / test project). Also detect **integration tests**: projects/dirs/files named `*Integration*`, `Category=Integration` traits, `@pytest.mark.integration`, Testcontainers/docker-compose usage in tests. Missing → record a warning for the final `warnings[]`; do not stop (Coder can set it up during the first run).
 
 ## 2. Stack detection
 
@@ -47,17 +47,18 @@ Ask **one question at a time**, defaults preselected. Every default is read from
 3. Human gates (default: Gherkin approval before code — ON; final QA report — ON)
 4. Mutation score threshold (template `thresholds.mutation_score_min`)
 5. Send-back limit / parallel slice limit (template `return_limit` / `parallel_limit`)
-6. BDD framework binding? (default: none — plain Gherkin document + test tags; options: reqnroll / cucumber-js / behave, offer only what fits the stack)
+6. Integration tests found → propose the split: fast `tests.run_command`/`scoped_command`/`coverage_command` get the stack's `exclude_integration` filter (template `#@ <stack>.exclude_integration`, scoped: `scoped_exclude_integration` where defined), `tests.integration_command` = the stack's `#@ <stack>.integration_command` (adapt to the project's real integration project/marker), and ask `tests.integration_at` (default `merge-gate`; `run-end` = once after the last merge). None found → leave both keys out.
+7. BDD framework binding? (default: none — plain Gherkin document + test tags; options: reqnroll / cucumber-js / behave, offer only what fits the stack)
 
 If the user says "defaults" / "accept all", skip the remaining questions.
 
 ## 5. Write config and role agents
 
-1. Instantiate `${CLAUDE_PLUGIN_ROOT}/templates/bob-pipeline.yaml`: fill `{{PROJECT_NAME}}` (repo/dir name), `{{STACK}}`, `{{TOOLS}}` (the frozen YAML list from step 3, including each tool's registry `scope_flag`), `{{TESTS_RUN_COMMAND}}` / `{{TESTS_SCOPED_COMMAND}}` / `{{TESTS_COVERAGE_COMMAND}}` (the `#@ <stack>.<key>` default lines in the template for the detected stack, with `{sln}` replaced by the detected solution/project file; keep `{filter}` literally; unknown stack → ask the user for the commands, omit scoped/coverage if none), apply interview answers.
+1. Instantiate `${CLAUDE_PLUGIN_ROOT}/templates/bob-pipeline.yaml`: fill `{{PROJECT_NAME}}` (repo/dir name), `{{STACK}}`, `{{TOOLS}}` (the frozen YAML list from step 3, including each tool's registry `scope_flag`), `{{TESTS_RUN_COMMAND}}` / `{{TESTS_SCOPED_COMMAND}}` / `{{TESTS_COVERAGE_COMMAND}}` (the `#@ <stack>.<key>` default lines in the template for the detected stack, with `{sln}` replaced by the detected solution/project file; keep `{filter}` literally; unknown stack → ask the user for the commands, omit scoped/coverage if none), apply interview answers (uncomment `integration_command` / `integration_at` only when the integration split was accepted).
 2. Write to `.claude/bob-pipeline.yaml`.
 3. Validate: `python ${CLAUDE_PLUGIN_ROOT}/scripts/validate_config.py .claude/bob-pipeline.yaml --schema ${CLAUDE_PLUGIN_ROOT}/schemas/bob-pipeline.schema.json`. Non-zero exit → fix the config per the JSON violations and re-validate; never leave an invalid config behind.
 4. Instantiate the five role templates from `${CLAUDE_PLUGIN_ROOT}/agents/*.md` into `.claude/agents/bob/`: replace `{{PROJECT_NAME}}`, `{{DOMAIN}}` (one line inferred from the README/codebase), `{{TECH_STACK}}`, `{{TOOLS}}` (tool names + run commands relevant to that role). These project-local copies are what `/bob-run` spawns.
-5. Runtime ignores and permissions: `python ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade_project.py --project . --steps support` — appends the `.bob` runtime files (`run-state.yaml`, `state.yaml`, `loop-logs/`) and `.worktrees/` to `.gitignore`, and merges `permissions.allow` entries for the configured test/scoped/coverage/mutation commands into `.claude/settings.json` (existing entries are kept, nothing is overwritten).
+5. Local-only files and permissions: `python ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade_project.py --project . --steps support` — writes `.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/` to `.git/info/exclude` (via `git rev-parse --git-common-dir`; local, shared by all worktrees; NOT `.gitignore`, so teammates see nothing), and merges `permissions.allow` entries for the configured test/scoped/coverage/mutation commands into `.claude/settings.json` (existing entries are kept, nothing is overwritten).
 
 ## 6. Report — outcome `initialized`
 
@@ -73,6 +74,7 @@ Output exactly:
 For a project initialized with 1.0.x/1.1.x. Requires `.claude/bob-pipeline.yaml` (else `not-initialized`). Never asks interview questions.
 
 1. Always start with the dry run and show the JSON report: `python ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade_project.py --project . --dry-run`. With `--dry-run` in `$ARGUMENTS`, stop here.
-2. Otherwise run it without `--dry-run`. Deterministic parts: config migration (`cleaner` merged into `architect`, `tests.*` added from the template defaults, `scope_flag` added to mutation tools; old file kept as `bob-pipeline.yaml.bak-pre-1.2`, comments are not preserved), `.gitignore` entries, `permissions.allow` merge, removal of `.claude/agents/bob/cleaner.md`.
+2. Otherwise run it without `--dry-run`. Deterministic parts: config migration (`cleaner` merged into `architect`, `tests.*` added from the template defaults, `scope_flag` added to mutation tools; old file kept as `bob-pipeline.yaml.bak-pre-1.2`, comments are not preserved), `.git/info/exclude` entries (never `.gitignore`), the integration-exclusion filter on the test commands when `tests.integration_command` is set, `permissions.allow` merge, removal of `.claude/agents/bob/cleaner.md`.
 3. Agent files are merged 3-way per role: base = the old plugin template (read from the plugin git history; refs `v1.1.0`, `3456188`, `v1.0.0`, `d7caca1`, or `--old-ref <ref>`) rendered with the placeholder values recovered from the project copy; ours = the project copy; theirs = the new template rendered with the same values; combined by `git merge-file`. Filled placeholders and project customizations survive; new template text is taken. Exit 1 means conflict markers were left in the reported files — resolve them by hand (or ask the user). Placeholders new in 1.2.0 that had no old value are listed in `unresolved`; fill them as in step 5.4 of init. No usable old template (`no-old-template`) → regenerate that file as in init and re-apply customizations manually.
 4. Validate the migrated config (`validate_config.py`) and report: changes, files merged/conflicted/removed, permissions and ignore entries added.
+5. Tracked bob files (committed by an earlier version): run once more with `--steps untrack` (`git rm -r --cached`, files stay on disk, nothing committed) and tell the user to commit the removal — one PR per repo. Without agent copies in the project (config-only) use `--steps config,support`.

@@ -2,6 +2,8 @@
 
 A Claude Code plugin implementing Uncle Bob's AI development flow ([SwarmForge](https://github.com/unclebob/swarm-forge)): five role subagents — Specifier, Coder, Architect (refactor + boundaries), Hardener, QA — with a **test gauntlet instead of code review**. You approve the Gherkin intent before any code exists and read the QA report at the end; the code itself is guarded by mutation testing, complexity/duplication baselines, and traced acceptance tests.
 
+**bob-pipeline runs on top of yamlkit**: yamlkit owns spec → plan → tasks (`.specify/`), bob implements the tasks. With `.specify/` present, `/bob-run` takes its artifacts as input and treats `.specify/memory/constitution.yaml` as binding (NON-NEGOTIABLE violations send the slice back); without it bob runs standalone. Bob's own files (`.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/`) stay out of the project repo (`.git/info/exclude`).
+
 **Full documentation: [docs/README.md](docs/README.md)**
 
 ## Quick start
