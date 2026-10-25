@@ -246,6 +246,11 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "warmup_command": {
+          "description": "Warm-up command, run ONCE when a slice worktree is created (restore/install); after it all other test commands run without package restore.",
+          "type": "string",
+          "minLength": 1
+        },
         "run_command": {
           "type": "string",
           "minLength": 1

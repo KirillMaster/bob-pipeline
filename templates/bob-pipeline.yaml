@@ -48,12 +48,14 @@ roles:
 # `exclude_integration` is appended to run/coverage commands (scoped: see its own default) when
 # integration tests exist; integration tests are marked Category=Integration / @pytest.mark.integration /
 # an `integration` path / JUnit tag `integration`.
-#@ csharp.run_command = dotnet test {sln}
-#@ csharp.scoped_command = dotnet test {sln} --filter "{filter}"
-#@ csharp.coverage_command = dotnet test {sln} --collect:"XPlat Code Coverage"
+#@ csharp.warmup_command = dotnet restore {sln}
+#@ csharp.run_command = dotnet test {sln} --no-restore -nodeReuse:false
+#@ csharp.scoped_command = dotnet test {sln} --no-restore -nodeReuse:false --filter "{filter}"
+#@ csharp.coverage_command = dotnet test {sln} --no-restore -nodeReuse:false --collect:"XPlat Code Coverage"
 #@ csharp.exclude_integration = --filter "Category!=Integration"
 #@ csharp.scoped_exclude_integration = --filter "({filter})&Category!=Integration"
-#@ csharp.integration_command = dotnet test {sln} --filter "Category=Integration"
+#@ csharp.integration_command = dotnet test {sln} --no-restore -nodeReuse:false --filter "Category=Integration"
+#@ typescript.warmup_command = npm ci --prefer-offline --no-audit
 #@ typescript.run_command = npm test
 #@ typescript.scoped_command = npm test -- {filter}
 #@ typescript.coverage_command = npm test -- --coverage

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+Speed (measured on 23-25.10.2026: `dotnet build/test` = 1161 calls, 24.8 h total, p95 335 s, cold restore and MSBuild node conflicts between parallel worktrees; bob-coder = 69 runs, p50 58 min, p95 170 min, 60% of all subagent time).
+
+- **D26: warm build.** New optional `tests.warmup_command` (schema + template): `/bob-run` runs it once per slice worktree before the first role (restore/install; failure non-fatal, logged in the slice report). C# defaults: `dotnet restore {sln}` warm-up, and `--no-restore -nodeReuse:false` on run/scoped/coverage/integration commands; TypeScript warm-up `npm ci --prefer-offline --no-audit`. Worktrees already isolate bin/obj, so no `--artifacts-path`.
+- **D27: slice budget.** Specifier hard rule: at most 5 Gherkin scenarios and 8 `files` per slice (~40 coder tool calls); larger slices split with `depends_on`.
+- **Rollout:** existing projects must update `.claude/bob-pipeline.yaml` `tests`: add `warmup_command` and the `--no-restore -nodeReuse:false` flags.
+
 ## 1.4.1
 
 - **EC-11: sandboxed-session precondition.** `/bob-run` started from a desktop-app worktree sandbox (`.claude/worktrees/<name>/`) now stops with outcome `sandboxed-session` instead of letting every role die on its first Write. Measured 23-24.10.2026: 165 blocked Write calls, 112 of them in a single session retrying the same path. Bob needs the main project root for `bob_root` and its own `.worktrees/bob-*`; the sandbox forbids writes outside itself.

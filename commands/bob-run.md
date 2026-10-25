@@ -71,6 +71,8 @@ git worktree add .worktrees/bob-<feature>-<slice> -b bob/<feature>/<slice> <base
 
 `<base>` = user's branch head (or post-merge head of the last predecessor for dependent slices). Per-slice state goes to `<bob_root>/.bob/slices/<slice>/state.yaml` (from `templates/state.yaml`); nothing is seeded into the worktree.
 
+**Warm build (D26)**: right after `git worktree add`, if `tests.warmup_command` is set, run it once in the slice worktree BEFORE the first role spawn (foreground — it must finish; never background). A failure is non-fatal: continue, and record it (command, exit code, last lines) in the slice report. All later test commands assume restored packages (`--no-restore` for .NET). Output isolation: each slice worktree is a separate checkout, so `bin/`/`obj/` are already per-worktree and no `--artifacts-path` is needed; `-nodeReuse:false` in the .NET commands keeps MSBuild nodes from being shared across parallel worktrees.
+
 **Baselines (EC-7)**: if `<bob_root>/.bob/baselines.json` doesn't exist, capture now: run the configured complexity/duplication tools on the base, parse via `parse_reports.py`, store `{"complexity": <max_ccn>, "duplication": <pct>}`.
 
 ## 6. Role loop (per slice)

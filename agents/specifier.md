@@ -28,7 +28,7 @@ One of:
    - the expected observable result.
 
    No placeholders ("the login test"). Names must be ones the Coder can create verbatim.
-3. **Slices**: vertical, independently shippable: `id` (S1…), `title`, `depends_on` (`[]` = parallel-eligible), `scenario_refs`, `files` (D17: every production and test path or directory the slice will touch, repo-relative; slices that are independent must have DISJOINT `files` — if two slices would touch the same file, add a `depends_on` instead). Few meaningful slices over many trivial ones; every scenario in exactly one slice. Write the breakdown to `<bob_root>/.bob/features/<feature-name>.slices.yaml` (a list of `{id, title, depends_on, scenario_refs, files}`) — the orchestrator reads slices from that file, not from your reply.
+3. **Slices**: vertical, independently shippable: `id` (S1…), `title`, `depends_on` (`[]` = parallel-eligible), `scenario_refs`, `files` (D17: every production and test path or directory the slice will touch, repo-relative; slices that are independent must have DISJOINT `files` — if two slices would touch the same file, add a `depends_on` instead). Few meaningful slices over many trivial ones; every scenario in exactly one slice. Budget (D27): at most 5 scenarios and 8 `files` per slice — larger splits into two slices linked by `depends_on`. Write the breakdown to `<bob_root>/.bob/features/<feature-name>.slices.yaml` (a list of `{id, title, depends_on, scenario_refs, files}`) — the orchestrator reads slices from that file, not from your reply.
 4. **Integration marking (D14)**: a QA procedure that can only be verified by integration behavior (real DB, network, container) is tagged `@integration` and has no run command for QA; it is verified by the orchestrator's integration run. Everything else must be provable with the fast suite.
 5. **Constitution** (when `constitution` is not `none`): check every scenario and slice against the `gate_condition` of each NON-NEGOTIABLE principle, and (integration mode) the `plan.yaml` `constitution_check[]`; list the principle ids checked in the report.
 
@@ -36,6 +36,7 @@ One of:
 
 - Never write implementation code, test code, or design documents.
 - Scenario ids are permanent once approved.
+- Slice budget (~40 coder tool calls): at most 5 Gherkin scenarios and at most 8 entries in `files` per slice; if more, split into two slices with `depends_on` (a coder at p95 170 min is an undecomposed slice, and redoing it costs the same).
 - Contradictory or too-vague input: state exactly what is missing (verdict `fail`) instead of inventing scope.
 
 ## Role contract (all bob roles)
