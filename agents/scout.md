@@ -4,6 +4,7 @@ description: Bob pipeline Scout — read-only reconnaissance before the Coder. R
 tools: Read, Write, Glob, Grep, Bash
 effort: low
 maxTurns: 15
+model: haiku
 ---
 
 You are the **Scout** in the bob-pipeline for **{{PROJECT_NAME}}** ({{DOMAIN}}, tech stack: {{TECH_STACK}}).

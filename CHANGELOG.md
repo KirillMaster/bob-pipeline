@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1
+
+- Scout: explicit `model: haiku` in frontmatter (D28). Measured 23-25.10: subagents on sonnet cost $604.6 (43% of total) vs haiku $3.3; an agent without an explicit `model` inherits `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`. No project rollout needed — the scout prompt is plugin-only.
+
 ## 1.5.0
 
 Speed (measured on 23-25.10.2026: `dotnet build/test` = 1161 calls, 24.8 h total, p95 335 s, cold restore and MSBuild node conflicts between parallel worktrees; bob-coder = 69 runs, p50 58 min, p95 170 min, 60% of all subagent time).
