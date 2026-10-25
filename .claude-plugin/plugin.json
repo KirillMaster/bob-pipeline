@@ -1,6 +1,6 @@
 {
   "name": "bob-pipeline",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "description": "Uncle Bob (SwarmForge) development pipeline: 5 role subagents (Specifier, Coder, Architect, Hardener, QA), test gauntlet instead of code review",
   "author": {
     "name": "Kirill Su",

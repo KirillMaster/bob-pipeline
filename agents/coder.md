@@ -13,6 +13,7 @@ You implement exactly one slice against its **approved** Gherkin scenarios. Do n
 
 - The slice (id, title, scenario_refs), the approved `.feature` file(s) and the `.qa.md` procedures in `.bob/features/`.
 - The existing code and tests in the run worktree.
+- The Scout's digest for this slice (`report: <path>` in the task context, when present): where the slice lands, which tests to follow, extension points, traps. Treat it as a map, not as truth — verify a path before you edit it, but do not re-explore what it already answers.
 - Send-back: the diagnosis (failing procedure ids + `report: <path>`). Read the report's `## Send-back` section yourself: it holds, per failing item, expected vs actual and the exact failing output (D18). Fix ALL listed items in one pass and one commit; re-run only the listed tests while iterating; don't rewrite unrelated code.
 
 ## Your job — strict TDD
@@ -23,6 +24,17 @@ You implement exactly one slice against its **approved** Gherkin scenarios. Do n
 2. Watch it fail for the right reason, then implement the minimum to pass.
 3. While iterating run only **scoped** tests (new/affected tests via a filter).
 4. **Once, at the end, before committing**: run the full suite (`tests.run_command`). It must be green, including tests you didn't write. In the same final step run the quality-gate fast checks from the task context (D21): warnings-as-errors build (`lint`), format check (`format`), architecture tests (`Category=Architecture`). Write each tool's `<exit code>\n<output tail>` to `.bob/reports/<category>-<slice>.txt` in `bob_root`; a failure is yours to fix in place. Tools absent from the task context are skipped. The suite is the fast one (integration tests are excluded by the command); never run `tests.integration_command`.
+
+## Token discipline
+
+Every tool call re-reads your whole context, and your context grows with each file you open. A slice that takes 60 calls costs a fraction of the same slice taken in 120.
+
+- **Batch read-only shell.** Independent `cat`/`sed`/`grep`/`ls`/`git log|diff|show|status` go in ONE call joined by `;`, not in a series of calls.
+- **Read ranges, not files.** `sed -n '120,180p' <file>` over `cat <file>` for anything above ~200 lines. Use `Read` with `offset`/`limit` when you need the file tool.
+- **Never read the same thing twice.** It is already in your context above; scroll, don't re-run.
+- **Lean on the Scout's digest** instead of repeating its exploration.
+- **Long builds and test runs**: still synchronous in this turn (role contract), but run the *scoped* filter while iterating — the full suite only once, at the end.
+- If you pass ~60 tool calls and the slice is still not closed, stop and return `verdict: "send-back"` with diagnosis `slice-too-large: <what is left>`. An honest stop is cheaper than a run that dies at `maxTurns`, and it tells the Specifier to cut finer.
 
 ## Hard rules
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0
+
+Token budget (measured on 23-24.10.2026: bob-coder = 79 runs, 120 model calls per run, context p50 131K / p90 232K, 34% of the whole period's spend).
+
+- **D25: Scout.** New read-only role template `agents/scout.md`, spawned by `/bob-run` on haiku before the coder's FIRST pass on a slice (skipped on send-back). It returns a digest — where the slice lands, which tests to follow, extension points, traps — written to `.bob/reports/scout-<slice>.md` and passed to the coder as `scout_report`. Not a config role: no gates, no commit, no `return_limit`; a scout failure is a deviation, not a slice failure. Plugin-only prompt (`${CLAUDE_PLUGIN_ROOT}/agents/scout.md`), so projects need no copy and no re-init.
+- **Coder token discipline.** `agents/coder.md` gains a `## Token discipline` section: batch independent read-only shell into one call, read ranges instead of whole files, never re-read, lean on the scout's digest; and a self-stop at ~60 tool calls with `send-back` + `slice-too-large: <what is left>` so the Specifier cuts finer instead of the run dying at `maxTurns`.
+- Config: optional `scout: {enabled, model}` (schema). Absent = enabled on haiku. No migration needed for existing projects.
+- Rollout: `/plugin update bob-pipeline` is enough for the scout. The coder change reaches a project through `python scripts/upgrade_project.py --project <path> --steps agents --old-ref v1.3.3`.
+
 ## 1.3.1
 
 - Fix: tenengroup remotes use `TenenGroup.QualityGates.Build` (0.3.0) and `TenenGroup.ArchitectureRules` (2.0.0); arch package was wrongly `TenenGroup.QualityGates`.
