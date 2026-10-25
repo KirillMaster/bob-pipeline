@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+
+- **EC-11: sandboxed-session precondition.** `/bob-run` started from a desktop-app worktree sandbox (`.claude/worktrees/<name>/`) now stops with outcome `sandboxed-session` instead of letting every role die on its first Write. Measured 23-24.10.2026: 165 blocked Write calls, 112 of them in a single session retrying the same path. Bob needs the main project root for `bob_root` and its own `.worktrees/bob-*`; the sandbox forbids writes outside itself.
+
 ## 1.4.0
 
 Token budget (measured on 23-24.10.2026: bob-coder = 79 runs, 120 model calls per run, context p50 131K / p90 232K, 34% of the whole period's spend).
