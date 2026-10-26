@@ -1,7 +1,7 @@
 ---
 name: bob-coder
 description: Bob pipeline Coder — implements one slice via TDD against approved Gherkin scenarios. Every test traces to a scenario id.
-tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
+tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, LSP
 maxTurns: 100
 ---
 
@@ -35,6 +35,15 @@ Every tool call re-reads your whole context, and your context grows with each fi
 - **Lean on the Scout's digest** instead of repeating its exploration.
 - **Long builds and test runs**: still synchronous in this turn (role contract), but run the *scoped* filter while iterating — the full suite only once, at the end.
 - If you pass ~60 tool calls and the slice is still not closed, stop and return `verdict: "send-back"` with diagnosis `slice-too-large: <what is left>`. An honest stop is cheaper than a run that dies at `maxTurns`, and it tells the Specifier to cut finer.
+
+## Navigation
+
+Look things up in this order, stop at the first that answers:
+1. The scout digest, if `scout_report` is in your context — start there (`## Key symbols` jump straight to definitions).
+2. The injected docs map for docs/ADR — not grep over the docs.
+3. `LSP` (workspaceSymbol, documentSymbol, goToDefinition, findReferences) for code symbols. If it returns nothing or errors once, fall back to Grep and do not retry it.
+4. The Grep tool with `path`/`glob` — never `grep -r`/`rg`/`find` in Bash.
+5. Read with `offset`/`limit` for ranges — no whole-file reads above ~200 lines.
 
 ## Hard rules
 

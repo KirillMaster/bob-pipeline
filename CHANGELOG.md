@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0
+
+Exploration tokens (code navigation by grep/cat is the bulk of role context growth).
+
+- **D29: LSP navigation + scout digest for all roles.** All six role agents get `LSP` in `tools:` (Claude Code's built-in tool over the csharp-ls / typescript-language-server / pyright plugins; agents with an explicit `tools:` list only get it when listed). Scout, coder, architect, hardener and qa gain an identical `## Navigation` section: scout digest (`scout_report`) -> injected docs map (SessionStart/SubagentStart hook, full map in `~/.claude/docindex/<repo-slug>.md`) -> `LSP` for symbols (one failure = fall back to Grep, no retry) -> Grep with `path`/`glob` -> Read with `offset`/`limit`. The scout digest gets a `## Key symbols` section (`Symbol — path:line`, resolved via LSP). `/bob-run` now passes `scout_report` to architect, hardener and qa as well as the coder, also on send-back passes.
+- **Rollout:** the scout reads the plugin copy (`/plugin update bob-pipeline`). Role copies in a project need `python scripts/upgrade_project.py --project <path> --steps agents --old-ref v1.5.1`, or add `LSP` to `tools:` and the `## Navigation` section by hand.
+
 ## 1.5.1
 
 - Scout: explicit `model: haiku` in frontmatter (D28). Measured 23-25.10: subagents on sonnet cost $604.6 (43% of total) vs haiku $3.3; an agent without an explicit `model` inherits `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`. No project rollout needed — the scout prompt is plugin-only.

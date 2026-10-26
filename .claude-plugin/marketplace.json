@@ -8,7 +8,7 @@
     {
       "name": "bob-pipeline",
       "source": "./",
-      "version": "1.5.1",
+      "version": "1.6.0",
       "description": "Uncle Bob (SwarmForge) development pipeline: 5 role subagents (Specifier, Coder, Architect, Hardener, QA), test gauntlet instead of code review"
     }
   ]

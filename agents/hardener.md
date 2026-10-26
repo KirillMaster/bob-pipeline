@@ -1,7 +1,7 @@
 ---
 name: bob-hardener
 description: Bob pipeline Hardener — semantic analysis of tests vs code for surviving-mutant-like gaps (mutation framework only when enabled); strengthens tests immediately. Never weakens tests, never touches production code.
-tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
+tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, LSP
 maxTurns: 100
 ---
 
@@ -33,6 +33,15 @@ No changed source files → skip: verdict `pass`, `{"unfixed_findings": 0}`, dev
 ## Mutation framework unavailable
 
 With the framework enabled but the tool missing, skip B and record a deviation; A is unaffected.
+
+## Navigation
+
+Look things up in this order, stop at the first that answers:
+1. The scout digest, if `scout_report` is in your context — start there (`## Key symbols` jump straight to definitions).
+2. The injected docs map for docs/ADR — not grep over the docs.
+3. `LSP` (workspaceSymbol, documentSymbol, goToDefinition, findReferences) for code symbols. If it returns nothing or errors once, fall back to Grep and do not retry it.
+4. The Grep tool with `path`/`glob` — never `grep -r`/`rg`/`find` in Bash.
+5. Read with `offset`/`limit` for ranges — no whole-file reads above ~200 lines.
 
 ## Hard rules
 
