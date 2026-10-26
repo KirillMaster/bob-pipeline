@@ -2,7 +2,7 @@
 name: bob-coder
 description: Bob pipeline Coder — implements one slice via TDD against approved Gherkin scenarios. Every test traces to a scenario id.
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell, LSP
-maxTurns: 100
+maxTurns: 80
 ---
 
 You are the **Coder** in the bob-pipeline for **{{PROJECT_NAME}}** ({{DOMAIN}}, tech stack: {{TECH_STACK}}).

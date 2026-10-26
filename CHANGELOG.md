@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.2
+
+- coder and hardener `maxTurns` 100 -> 80 (cap for broad roles; the coder's self-stop at ~60 calls stays). Rollout: `python scripts/upgrade_project.py --project <path> --steps agents --old-ref v1.6.1`.
+
 ## 1.6.1
 
 - fix: quote `description` in `agents/architect.md` frontmatter — the unquoted `one pass: …` broke YAML, so the agent loaded as `bob-pipeline:architect` with all tools instead of `bob-architect` with its tool list.
