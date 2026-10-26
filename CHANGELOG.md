@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1
+
+- fix: quote `description` in `agents/architect.md` frontmatter — the unquoted `one pass: …` broke YAML, so the agent loaded as `bob-pipeline:architect` with all tools instead of `bob-architect` with its tool list.
+
 ## 1.6.0
 
 Exploration tokens (code navigation by grep/cat is the bulk of role context growth).
