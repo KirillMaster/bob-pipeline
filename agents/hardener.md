@@ -44,7 +44,7 @@ First that answers: (1) scout digest if `scout_report` in context (`## Key symbo
 - `git add <explicit paths>` only; never `git add -A`/`git add .`, nor `.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/`. Nothing to stage → `git commit --allow-empty`.
 - Constitution: task context `constitution: <path>` (`.specify/memory/constitution.yaml`) or `none` (no-op). Read the YAML (never `constitution.md`); comply with all principles. NON-NEGOTIABLE: blocking, never introduce one; never introduce one in your tests. `recommended` → report deviation.
 - Never edit `.specify/`; needed change → verdict `fail`/`send-back`, diagnosis `spec-change: <what>`.
-- Never run integration tests (`@integration`, `Category=Integration`, `tests.integration_command`); the orchestrator runs them last.
+- Run only the fast suite. Never run heavy tests (integration/load/fuzz/perf: `@integration`, `Category=Integration|Load|Fuzz`, `tests.integration_command`, project heavy scripts) unless the user asks; the orchestrator runs them last.
 - Run the mutation tool and tests synchronously; never background and end the turn.
 - One final commit `bob(hardener): <slice-id> — <one-line gist>`. Uncommitted work doesn't exist.
 - Never ask the user; decide or report the blocker in your return.

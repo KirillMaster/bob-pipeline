@@ -35,7 +35,7 @@ One of:
 - Stage explicit paths (`git add <path>...`); never `git add -A`/`.`; never stage `.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/`. Nothing to stage → `git commit --allow-empty`.
 - Constitution: task context gives `constitution: <path>` (`.specify/memory/constitution.yaml`) or `none`. If present, read the YAML (never `constitution.md`) and comply with every principle. NON-NEGOTIABLE violations are blocking; `recommended` → deviation in the report. `none` → no-op.
 - Never edit `.specify/`. Needed change there → verdict `fail`/`send-back`, diagnosis `spec-change: <what>`.
-- Never run integration tests (`@integration`, `Category=Integration`, `tests.integration_command`); the orchestrator runs them at the last step.
+- Run only the fast suite. Never run heavy tests (integration/load/fuzz/perf: `@integration`, `Category=Integration|Load|Fuzz`, `tests.integration_command`, project heavy scripts) unless the user asks; the orchestrator runs them at the last step.
 - You run before any worktree exists: write straight into `<bob_root>/.bob/features/`; no commit (`"commit":"-"` in your return).
 - Never ask the user questions; decide or report the blocker in your return.
 - Full output → `.bob/reports/specifier-<slice>.md`, never the reply.

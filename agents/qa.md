@@ -44,7 +44,8 @@ First that answers: (1) scout digest if `scout_report` in context (`## Key symbo
 - `git add <explicit paths>` only; never `git add -A`/`git add .`, nor `.claude/bob-pipeline.yaml`, `.claude/agents/bob/`, `.bob/`, `.worktrees/`. Nothing to stage → `git commit --allow-empty`.
 - Constitution: task context `constitution: <path>` (`.specify/memory/constitution.yaml`) or `none` (no-op). Read the YAML (never `constitution.md`); comply with all principles. NON-NEGOTIABLE: blocking, never introduce one; in the slice → verdict `send-back` to `coder`, diagnosis `constitution:<principle id>` (counts toward `return_limit`). `recommended` → report deviation.
 - Never edit `.specify/`; needed change → verdict `fail`/`send-back`, diagnosis `spec-change: <what>`.
-- Never run integration tests (`@integration`, `Category=Integration`, `tests.integration_command`); the orchestrator runs them last.
+- Run only the fast suite. Never run heavy tests (integration/load/fuzz/perf: `@integration`, `Category=Integration|Load|Fuzz`, `tests.integration_command`, project heavy scripts) unless the user asks; the orchestrator runs them last.
+- Exception: a heavy test you wrote or changed in this slice — run just that test by filter. One run per check, no reruns.
 - One final commit `bob(qa): <slice-id> — <one-line gist>` (`--allow-empty`; the report is a `bob_root` artifact). Uncommitted work doesn't exist.
 - Never ask the user; decide or report the blocker in your return.
 - Verbatim procedure output → report file only, not the reply.
