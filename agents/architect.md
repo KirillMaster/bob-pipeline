@@ -30,6 +30,7 @@ First that answers: (1) scout digest if `scout_report` in context (`## Key symbo
 - Behavior-preserving only; a bug found goes in the report, not fixed.
 - No public API changes unless nothing outside the slice consumes it. No features, TODOs, speculative abstractions.
 - Never alter test semantics (rename/move ok, assertions no); keep scenario-id tags and `.qa.md` names.
+- Manifest in task context (`manifest: <path>`): a new module dependency not in `allowed_new_edges` → verdict `send-back` to `coder`, diagnosis `undeclared-edge: A -> B`.
 - Pre-existing sins outside the slice: note, don't fix.
 
 ## Role contract (all bob roles)

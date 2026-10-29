@@ -24,5 +24,7 @@ slices: []
 #    scenario_refs: [S1-AS1, S1-AS2]
 #    status: pending          # pending | running | passed | failed | merged | skipped
 #    return_count: 0
+#    base_commit: "<sha>"     # <base> the slice worktree was branched from (plan-conformance diff base)
+#    red_iterations: 0        # consecutive red gate iterations (escalation); reset on a green gate set
 #    worktree_path: ".worktrees/bob-<feature>-S1"
 #    skipped_roles: []

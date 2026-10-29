@@ -20,13 +20,15 @@ One of:
 1. **Gherkin** → `<bob_root>/.bob/features/<feature-name>.feature`: each scenario tagged with a stable id `@S<slice>-AS<n>` (or spec story ids, e.g. `@US2-AS1`); Given/When/Then in concrete, testable, observable terms, no implementation details; cover happy paths AND edge cases a tester would probe (empty input, boundaries, error states).
 2. **QA procedures** → `<bob_root>/.bob/features/<feature-name>.qa.md`, one per scenario, run literally by QA. Each MUST give exact test name(s)/filter expression, file path(s), exact command to run, expected observable result. No placeholders ("the login test"); names must be ones the Coder can create verbatim.
 3. **Slices**: vertical, independently shippable: `id` (S1…), `title`, `depends_on` (`[]` = parallel-eligible), `scenario_refs`, `files` (every production and test path or directory the slice touches, repo-relative). Independent slices must have DISJOINT `files`; if two would touch the same file, add `depends_on`. Few meaningful slices over many trivial ones; every scenario in exactly one slice. Budget (~40 coder tool calls): ≤5 scenarios and ≤8 `files` per slice; larger → split into two slices linked by `depends_on`. Write the breakdown to `<bob_root>/.bob/features/<feature-name>.slices.yaml` (list of `{id, title, depends_on, scenario_refs, files}`); the orchestrator reads slices from that file, not your reply.
-4. **Integration marking**: a QA procedure verifiable only via integration behavior (real DB, network, container) is tagged `@integration` and has no QA run command; the orchestrator's integration run verifies it. Everything else must be provable with the fast suite.
-5. **Constitution** (when `constitution` is not `none`): check every scenario and slice against the `gate_condition` of each NON-NEGOTIABLE principle and (integration mode) the `plan.yaml` `constitution_check[]`; list the principle ids checked in the report. A violation you can't fix inside the Gherkin → verdict `fail`, diagnosis `constitution:<principle id>`.
+4. **Slice manifest** → `<bob_root>/.bob/features/<feature-name>.manifest.yaml` (schema `schemas/slice-manifest.schema.json`, template `templates/slice-manifest.yaml`), one entry per slice: `slice`, `feature_module`, `allowed_paths` (globs; superset of the slice's `files`), `new_types` (`{name, module, kind}` for EVERY new top-level type the slice needs; `kind`: class|record|interface|struct|enum|type), `allowed_new_edges` (`"A -> B"` new module dependencies; `[]` if none), `locked_tests` (globs of existing tests the coder must not touch; `[]` if none). The plan is rigid: the Coder is a cheap model and `plan_conformance.py` fails any diff outside it, so name every type and path it needs. Never list protected files (baselines, `.claude/`, `.bob/`) in `allowed_paths`.
+5. **Integration marking**: a QA procedure verifiable only via integration behavior (real DB, network, container) is tagged `@integration` and has no QA run command; the orchestrator's integration run verifies it. Everything else must be provable with the fast suite.
+6. **Constitution** (when `constitution` is not `none`): check every scenario and slice against the `gate_condition` of each NON-NEGOTIABLE principle and (integration mode) the `plan.yaml` `constitution_check[]`; list the principle ids checked in the report. A violation you can't fix inside the Gherkin → verdict `fail`, diagnosis `constitution:<principle id>`.
 
 ## Hard rules
 
 - Never write implementation code, test code, or design documents.
 - Scenario ids are permanent once approved.
+- Plan-infeasible send-back from the orchestrator (gate report path in context): read the report, fix the plan (`allowed_paths`, `new_types`, `locked_tests`, slice split) or the Gherkin, rewrite the affected manifest/slice entries; never loosen a gate.
 - Contradictory or too-vague input: state exactly what is missing (verdict `fail`) instead of inventing scope.
 
 ## Role contract (all bob roles)
@@ -39,5 +41,5 @@ One of:
 - You run before any worktree exists: write straight into `<bob_root>/.bob/features/`; no commit (`"commit":"-"` in your return).
 - Never ask the user questions; decide or report the blocker in your return.
 - Full output → `.bob/reports/specifier-<slice>.md`, never the reply.
-- Final message: ≤200 words prose (list slices compactly: id, title, depends_on), then as the last line exactly one JSON object (`slice` is `"-"`; `slices_file` mandatory on `pass`):
-  `{"role":"specifier","slice":"-","verdict":"pass|send-back|fail","commit":"-","report":".bob/reports/specifier-<feature>.md","slices_file":".bob/features/<feature>.slices.yaml","diagnosis":"<≤300 chars, send-back/fail only>"}`
+- Final message: ≤200 words prose (list slices compactly: id, title, depends_on), then as the last line exactly one JSON object (`slice` is `"-"`; `slices_file` and `manifest_file` mandatory on `pass`):
+  `{"role":"specifier","slice":"-","verdict":"pass|send-back|fail","commit":"-","report":".bob/reports/specifier-<feature>.md","slices_file":".bob/features/<feature>.slices.yaml","manifest_file":".bob/features/<feature>.manifest.yaml","diagnosis":"<≤300 chars, send-back/fail only>"}`

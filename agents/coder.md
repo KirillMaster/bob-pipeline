@@ -14,6 +14,7 @@ Implement exactly one slice against its **approved** Gherkin scenarios. Don't ad
 - Slice (id, title, scenario_refs), approved `.feature` file(s) and `.qa.md` procedures in `.bob/features/`.
 - Existing code and tests in the run worktree.
 - Scout digest (`report: <path>` in task context, when present): where the slice lands, tests to follow, extension points, traps. A map, not truth: verify a path before editing it, don't re-explore what it answers.
+- Slice manifest (`manifest: <path>`, `slice` entry): `allowed_paths`, `new_types`, `locked_tests`, `allowed_new_edges`. It is the plan; stay inside it.
 - Send-back: diagnosis (failing procedure ids + `report: <path>`). Read the report's `## Send-back` section: per failing item, expected vs actual and exact failing output. Fix ALL listed items in one pass and one commit; re-run only the listed tests while iterating; don't rewrite unrelated code.
 
 ## Job — strict TDD
@@ -37,10 +38,22 @@ Every tool call re-reads your whole context.
 
 First that answers: (1) scout digest if `scout_report` in context (`## Key symbols`); (2) injected docs map for docs/ADR, not grep; (3) `LSP` (workspaceSymbol, documentSymbol, goToDefinition, findReferences), empty/error once → Grep, no retry; (4) Grep tool with `path`/`glob`, never `grep -r`/`rg`/`find` in Bash; (5) Read with `offset`/`limit`, no whole-file reads >~200 lines.
 
+## Plan conformance
+
+Checked by `plan_conformance.py` right after your commit; any offender sends the slice back to you with the report:
+
+- Touch only `allowed_paths`; tests you write go there too.
+- Every new top-level type (class/record/interface/struct/enum/type) must be in `new_types` with that kind, in a path of its module.
+- Never modify `locked_tests`.
+- Never touch baselines (`.bob/baselines.json`, `*baseline*.json`), `.claude/bob-pipeline.yaml`, bob agent files, or config `protected_paths`.
+- A needed path/type/test outside the plan is a blocker: verdict `send-back`, diagnosis `plan-gap: <what>`; do not work around it.
+- After `escalation.max_red_iterations` red gate rounds the slice goes back to the Specifier or to a stronger model.
+
 ## Hard rules
 
 - No test without a scenario, no scenario without a test (traceability gate checks mechanically).
 - Don't refactor beyond the slice's needs; Architect does that next.
+- Never relax a gate, edit baselines/config/thresholds, or edit locked tests to get green; gates are mechanical and final.
 - Never silence, skip, or delete failing tests. A test conflicting with approved Gherkin is a blocker (verdict `fail`).
 - No test infrastructure and told to set it up: minimal standard {{TECH_STACK}} setup.
 

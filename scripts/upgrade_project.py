@@ -48,8 +48,13 @@ import yaml
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OLD_REFS = ["v1.2.0", "v1.1.0", "3456188", "v1.0.0", "d7caca1"]
-DEFAULT_STEPS = "config,agents,support"
-ALL_STEPS = {"config", "agents", "support", "untrack", "qg"}
+DEFAULT_STEPS = "config,agents,support,plan"
+ALL_STEPS = {"config", "agents", "support", "untrack", "qg", "plan"}
+BACKUP_SUFFIX = ".bak-1.7"  # pre-1.8.0 copies of the config and agent files
+PLAN_DEFAULTS = {
+    "plan_conformance": {"enabled": True},
+    "escalation": {"max_red_iterations": 3, "on_exhaust": "specifier"},
+}
 QG_VERSION = "0.1.0"
 QG_PACKAGES = {
     "pet": {"build": "KirillMaster.QualityGates.Build", "arch": "KirillMaster.QualityGates.Architecture"},
@@ -75,7 +80,7 @@ QG_PRINCIPLES = [
      "diff-cover on the merge-gate coverage run reports >= 80% (bob quality gate: diff-coverage)."),
 ]
 # bob-owned local tooling, never tracked in the project repo (design D15)
-BOB_PATHS = [".claude/bob-pipeline.yaml", ".claude/bob-pipeline.yaml.bak-pre-1.2", ".claude/agents/bob/", ".bob/", ".worktrees/"]
+BOB_PATHS = [".claude/bob-pipeline.yaml", ".claude/bob-pipeline.yaml.bak-pre-1.2", ".claude/bob-pipeline.yaml" + BACKUP_SUFFIX, ".claude/agents/bob/", ".bob/", ".worktrees/"]
 EXCLUDE_HEADER = "# bob-pipeline local files"
 SHARED_KEYS = {"PROJECT_NAME", "DOMAIN", "TECH_STACK"}  # same value in every role copy
 SKIP_DIRS = {".git", "node_modules", "bin", "obj", ".venv", ".worktrees", ".bob"}
@@ -585,6 +590,20 @@ def migrate_qg_config(config, registry, csharp_ok):
     return config, changes
 
 
+def migrate_plan_config(config):
+    """1.8.0: plan-conformance gate on the coder plus the plan_conformance / escalation sections."""
+    changes = []
+    for role in config.get("roles", []):
+        if role["name"] == "coder" and "plan-conformance" not in role.get("gates", []):
+            role["gates"] = ["plan-conformance", *role.get("gates", [])]
+            changes.append("roles[coder].gates: +plan-conformance")
+    for key, value in PLAN_DEFAULTS.items():
+        if key not in config:
+            config[key] = dict(value)
+            changes.append(f"{key}: added")
+    return config, changes
+
+
 def run_qg(project, plugin_root, config, dry_run, version):
     res = {}
     registry = yaml.safe_load((plugin_root / "registry" / "tool-registry.yaml").read_text(encoding="utf-8"))
@@ -652,6 +671,18 @@ def run(project, plugin_root, dry_run, steps, old_refs, prefer_new=False, qg_ver
                 if hint:
                     report["steps"]["config"]["integration_candidates"] = hint
 
+    if "plan" in steps:
+        if config is None:
+            report["steps"]["plan"] = {"skipped": "no .claude/bob-pipeline.yaml"}
+        else:
+            config, changes = migrate_plan_config(config)
+            backup = cfg_path.with_name(cfg_path.name + BACKUP_SUFFIX)
+            if changes and not dry_run:
+                if not backup.exists():
+                    shutil.copyfile(cfg_path, backup)
+                cfg_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            report["steps"]["plan"] = {"changes": changes}
+
     if "agents" in steps:
         agents_dir = project / ".claude" / "agents" / "bob"
         res = {"files": {}, "removed": []}
@@ -678,6 +709,7 @@ def run(project, plugin_root, dry_run, steps, old_refs, prefer_new=False, qg_ver
                 text = r.pop("text", None)
                 r["changed"] = text is not None and text != current
                 if r["changed"] and not dry_run:
+                    shutil.copyfile(f, f.with_name(f.name + BACKUP_SUFFIX))
                     f.write_text(text, encoding="utf-8", newline="")
                 res["files"][f.name] = r
         else:
@@ -731,14 +763,14 @@ def main():
     ap.add_argument("--project", required=True)
     ap.add_argument("--plugin-root", default=str(PLUGIN_ROOT))
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--steps", default=DEFAULT_STEPS, help="comma list of config,agents,support,untrack,qg (untrack and qg are opt-in)")
+    ap.add_argument("--steps", default=DEFAULT_STEPS, help="comma list of config,agents,support,plan,untrack,qg (untrack and qg are opt-in)")
     ap.add_argument("--old-ref", action="append", help="git ref(s) of the plugin holding old agent templates")
     ap.add_argument("--qg-version", default=QG_VERSION, help="version pinned for the QG package references")
     ap.add_argument("--prefer-new", action="store_true", help="resolve conflicting agent hunks to the new template (project edits elsewhere are kept)")
     args = ap.parse_args()
     steps = {s.strip() for s in args.steps.split(",") if s.strip()}
     if not steps <= ALL_STEPS:
-        ap.error("--steps must be a subset of config,agents,support,untrack,qg")
+        ap.error("--steps must be a subset of config,agents,support,plan,untrack,qg")
     project = Path(args.project).resolve()
     if not project.is_dir():
         ap.error(f"project dir not found: {project}")
