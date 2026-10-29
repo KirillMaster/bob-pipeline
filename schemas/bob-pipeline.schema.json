@@ -242,6 +242,52 @@
         }
       }
     },
+    "bugfix": {
+      "description": "KISS gates for a `bugfix` run kind (1.9.0): scripts/bugfix_gates.py (K1-K5, K7, K8, K2/K3 with --run-tests) and bugfix_ablation.py (K6).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "max_added_lines": { "type": "integer", "minimum": 1, "default": 30 },
+        "max_files": { "type": "integer", "minimum": 1, "default": 2 },
+        "runs": { "description": "Repeats of the regression test on head and on the reverted base (flake guard).", "type": "integer", "minimum": 1, "maximum": 10, "default": 3 },
+        "test_command": { "description": "Runs the regression test; {tests} = its paths, {filter} = dotnet FullyQualifiedName filter of the added test methods.", "type": "string", "minLength": 1 },
+        "ablation": { "description": "K6 hunk ablation: off, warn (reported, gate passes) or hard.", "type": "string", "enum": ["off", "warn", "hard"], "default": "warn" }
+      }
+    },
+    "tidy_first": {
+      "description": "Tidy First split (1.9.0, E1 + Z16): structural commits must not touch test assertions or add tests (scripts/tidy_first.py).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "structural_prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "default": ["tidy", "refactor", "structural", "style", "format"]
+        }
+      }
+    },
+    "pr_description": {
+      "description": "PR body from the slice manifest (1.9.0, E3 + E4): scripts/pr_description.py.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "require_purpose": { "description": "Every new_types entry needs a purpose sentence.", "type": "boolean", "default": true }
+      }
+    },
+    "adr": {
+      "description": "ADR required gate (1.9.0, G1): a slice with a new interface or module edge needs an ADR (scripts/adr_gate.py).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "required": { "type": "boolean", "default": true },
+        "paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "default": ["docs/adr/**", "docs/decisions/**"] }
+      }
+    },
     "escalation": {
       "description": "After max_red_iterations consecutive red gate iterations the slice leaves the coder loop (1.8.0).",
       "type": "object",
@@ -370,7 +416,10 @@
               "architecture",
               "diff-coverage",
               "constitution-traceability",
-              "plan-conformance"
+              "plan-conformance",
+              "bugfix",
+              "tidy-first",
+              "adr"
             ]
           }
         },

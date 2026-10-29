@@ -52,6 +52,10 @@ DEFAULT_STEPS = "config,agents,support,plan"
 ALL_STEPS = {"config", "agents", "support", "untrack", "qg", "plan"}
 BACKUP_SUFFIX = ".bak-1.7"  # pre-1.8.0 copies of the config and agent files
 PLAN_DEFAULTS = {
+    "bugfix": {"enabled": True, "max_added_lines": 30, "max_files": 2, "runs": 3, "ablation": "warn"},
+    "tidy_first": {"enabled": True},
+    "pr_description": {"enabled": True, "require_purpose": True},
+    "adr": {"enabled": True, "required": True, "paths": ["docs/adr/**", "docs/decisions/**"]},
     "plan_conformance": {"enabled": True},
     "escalation": {"max_red_iterations": 3, "on_exhaust": "specifier"},
 }
@@ -591,12 +595,17 @@ def migrate_qg_config(config, registry, csharp_ok):
 
 
 def migrate_plan_config(config):
-    """1.8.0: plan-conformance gate on the coder plus the plan_conformance / escalation sections."""
+    """1.8.0/1.9.0: coder gates (plan-conformance, bugfix, tidy-first, adr) plus their config sections."""
     changes = []
     for role in config.get("roles", []):
         if role["name"] == "coder" and "plan-conformance" not in role.get("gates", []):
             role["gates"] = ["plan-conformance", *role.get("gates", [])]
             changes.append("roles[coder].gates: +plan-conformance")
+        if role["name"] == "coder":
+            for gate in ("bugfix", "tidy-first", "adr"):
+                if gate not in role.get("gates", []):
+                    role["gates"] = [*role.get("gates", []), gate]
+                    changes.append(f"roles[coder].gates: +{gate}")
     for key, value in PLAN_DEFAULTS.items():
         if key not in config:
             config[key] = dict(value)

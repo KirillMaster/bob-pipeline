@@ -29,6 +29,8 @@ You are the last gate before merge; the human reads *your report*, not the code.
 - **Behavior failure** (code does the wrong thing) → `send-back` to `coder`. Report gets a `## Send-back` section with, per failed procedure: id, expected, actual, hypothesis of where the defect lives, EXACT failing output excerpt (verbatim, ≤40 lines, trimmed to failing frames) so the Coder fixes everything in one pass. JSON diagnosis (≤300 chars) = failing procedure ids + `report: <path>`. Counts toward `return_limit`.
 - **`procedure-not-executable`** (test name/path in `.qa.md` doesn't match the code, missing prerequisite, ambiguous step): don't guess or invent a pass. Record `fail` with reason `procedure-not-executable`; verdict `send-back`, diagnosis prefixed `naming:` for a naming/path mismatch (fix `.qa.md` or route to coder), otherwise stating the missing prerequisite. Does NOT count toward `return_limit`.
 
+Bugfix slices: the QA report states root cause, regression test and whether the red-on-base / green-on-head run passed (`bugfix_gates.py --run-tests`).
+
 ## Navigation
 
 First that answers: (1) scout digest if `scout_report` in context (`## Key symbols`); (2) injected docs map for docs/ADR, not grep; (3) `LSP` (workspaceSymbol, documentSymbol, goToDefinition, findReferences), empty/error once → Grep, no retry; (4) Grep tool with `path`/`glob`, never `grep -r`/`rg`/`find` in Bash; (5) Read with `offset`/`limit`, no whole-file reads >~200 lines.

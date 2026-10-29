@@ -7,8 +7,15 @@ slices:
       - "src/<Module>/**"
       - "tests/<Module>.Tests/**"
     new_types:                   # every new top-level type; kind: class|record|interface|struct|enum|type
-      - {name: "<TypeName>", module: "<module name>", kind: class}
+      - {name: "<TypeName>", module: "<module name>", kind: class, purpose: "<one sentence: why this type exists>"}
     allowed_new_edges:           # new module dependencies, "A -> B" (architect reads; optional edge_check_command)
       - "<ModuleA> -> <ModuleB>"
     locked_tests:                # tests the coder must not touch
       - "tests/<Module>.Tests/Locked/**"
+    # kind: feature | bugfix      # bugfix enables scripts/bugfix_gates.py (K1-K8): needs root_cause + regression_test (or test_exempt)
+    # root_cause: "src/<Module>/<File>.cs#<Method>"
+    # regression_test: ["tests/<Module>.Tests/<Bug>Tests.cs"]   # red before the fix, also in locked_tests
+    # budget: {max_added_lines: 60, reason: "<why the fix is larger>"}
+    # allow: []                   # new-api | test-edit | marker | refactor
+    # structural: false           # pure tidy slice (scripts/tidy_first.py)
+    # adr: "docs/adr/0001-<slug>.md"   # required for a new interface or allowed_new_edges (scripts/adr_gate.py), or adr_exempt: "<reason>"

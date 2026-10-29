@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.9.0
+
+Run kind `bugfix` and design-quality gates, all deterministic (git / file tree / manifest, no LLM judges). Decisions C13, C23, C25, C31, Z16.
+
+- **Run kind `bugfix`** (`/bob-run --bugfix` or a bug report as input). The Specifier plans one `kind: bugfix` slice: `root_cause`, a red `regression_test` committed before the Coder (also `locked_tests`), optional `seam`, `budget` (needs `reason`), `allow` waivers, `test_exempt`. Manifest schema extended; `kind: bugfix` requires `root_cause`.
+- **Gate `bugfix`** (new `scripts/bugfix_gates.py`, KISS K1-K5, K7, K8): `missing-root-cause`, `missing-regression`, `root-cause-untouched`, `new-type`, `new-signature`, `test-edited` (existing assertions/literals are immutable), `temp-marker` (TODO/workaround/pragma disable/[Obsolete] without ticket), `budget` (`bugfix.max_added_lines` 30, `max_files` 2). `--run-tests` adds K2/K3: the regression test is red with the `root_cause` files reverted to base and green on head, `bugfix.runs` times (flake guard), needs `bugfix.test_command`.
+- **K6 hunk ablation** (new `scripts/bugfix_ablation.py`): every production hunk is reverse-applied in a temporary worktree; tests still green = `unnecessary-hunk`. `bugfix.ablation`: `warn` (default, reported in `warnings`) | `hard` | `off`; capped at 12 hunks.
+- **Gate `tidy-first`** (new `scripts/tidy_first.py`, E1 + Z16): commits with a `tidy:`/`refactor:`/`structural:`/`style:`/`format:` subject, or every commit of a slice with `structural: true`, must not change existing test assertions and must not add test methods.
+- **Gate `adr`** (new `scripts/adr_gate.py`, G1): a slice with a new `interface` or `allowed_new_edges` needs `adr:` under `docs/adr/**` or `docs/decisions/**` with non-empty Context, Decision, Alternatives sections, or `adr_exempt`.
+- **PR description** (new `scripts/pr_description.py`, E3 + E4): renders the PR body from the slice manifest; every `new_types` entry needs a `purpose` (`pr_description.require_purpose`).
+- `compute_gates.py`: gates `bugfix`, `tidy-first`, `adr` read reports via repeatable `--gate-report <gate>=<file>`. Shared diff helpers in `scripts/diffkit.py`.
+- Config: sections `bugfix`, `tidy_first`, `pr_description`, `adr` (defaults in template and schema); `/bob-init --upgrade` (step `plan`) adds them and the three coder gates.
+- Tests: `tests/test_scripts/test_bugfix_gates.py`.
+- Not included: K8 complexity/nesting delta (needs Roslyn measures), K4 Roslyn signature diff (regex heuristic instead).
+
 ## 1.8.0
 
 Hard planning, cheap coder: the Specifier plans each slice rigidly, a cheap model (haiku/sonnet) codes, and quality is enforced only by mechanical gates.
