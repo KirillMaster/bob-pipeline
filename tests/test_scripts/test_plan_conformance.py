@@ -258,7 +258,7 @@ def test_upgrade_plan_step_adds_keys_and_is_idempotent():
     cfg.pop("escalation")
     next(r for r in cfg["roles"] if r["name"] == "coder")["gates"].remove("plan-conformance")
     cfg, changes = up.migrate_plan_config(cfg)
-    assert len(changes) == 3
+    assert len(changes) == 6  # 3 plan keys + the 1.9.0 coder gates (bugfix, tidy-first, adr)
     assert next(r for r in cfg["roles"] if r["name"] == "coder")["gates"][0] == "plan-conformance"
     assert cfg["escalation"] == {"max_red_iterations": 3, "on_exhaust": "specifier"}
     assert up.migrate_plan_config(cfg)[1] == []

@@ -36,7 +36,8 @@
             "properties": {
               "name": { "type": "string", "minLength": 1 },
               "module": { "type": "string", "minLength": 1 },
-              "kind": { "type": "string", "enum": ["class", "record", "interface", "struct", "enum", "type"] }
+              "kind": { "type": "string", "enum": ["class", "record", "interface", "struct", "enum", "type"] },
+              "purpose": { "description": "One sentence: why this type exists (PR description, 1.9.0).", "type": "string", "minLength": 10 }
             }
           }
         },
@@ -49,8 +50,65 @@
           "description": "Globs of tests the coder must not touch.",
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
+        },
+        "kind": {
+          "description": "Run kind of the slice (1.9.0); bugfix enables the KISS gates (scripts/bugfix_gates.py).",
+          "type": "string",
+          "enum": ["feature", "bugfix"],
+          "default": "feature"
+        },
+        "structural": {
+          "description": "Pure tidy slice: every commit is checked as structural (scripts/tidy_first.py).",
+          "type": "boolean"
+        },
+        "root_cause": {
+          "description": "bugfix: production file, optionally #method, where the defect lives.",
+          "type": "string",
+          "minLength": 1
+        },
+        "regression_test": {
+          "description": "bugfix: globs/paths of the red regression test committed by the Specifier (also in locked_tests).",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "test_exempt": {
+          "description": "bugfix: reason no regression test is possible (config/SQL/yaml without a seam).",
+          "type": "string",
+          "minLength": 1
+        },
+        "seam": {
+          "description": "bugfix: Type.Member seams the regression test needs, stubbed before the fix.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "budget": {
+          "description": "bugfix: override of bugfix.max_added_lines / max_files; a reason is required.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_added_lines": { "type": "integer", "minimum": 1 },
+            "max_files": { "type": "integer", "minimum": 1 },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        },
+        "allow": {
+          "description": "bugfix: gate waivers granted by the Specifier.",
+          "type": "array",
+          "items": { "type": "string", "enum": ["new-api", "test-edit", "marker", "refactor"] }
+        },
+        "adr": {
+          "description": "Path of the ADR for an architectural slice (new interface or module edge); scripts/adr_gate.py.",
+          "type": "string",
+          "minLength": 1
+        },
+        "adr_exempt": {
+          "description": "Reason an architectural slice needs no ADR.",
+          "type": "string",
+          "minLength": 1
         }
-      }
+      },
+      "if": { "properties": { "kind": { "const": "bugfix" } }, "required": ["kind"] },
+      "then": { "required": ["root_cause"] }
     }
   }
 }

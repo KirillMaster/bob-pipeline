@@ -132,6 +132,30 @@ escalation:
   on_exhaust: specifier
   # escalation_model: opus
 
+# Run kind `bugfix` (1.9.0): the Specifier writes the red regression test + root_cause; the KISS gates keep the fix minimal.
+bugfix:
+  enabled: true
+  max_added_lines: 30
+  max_files: 2
+  runs: 3             # regression test repeats (flake guard)
+  ablation: warn      # K6 hunk ablation: off | warn | hard
+  # test_command: 'dotnet test --no-restore --filter "{filter}"'   # enables the K2/K3 test runs and K6
+
+# Tidy First (E1, Z16): commits prefixed tidy:/refactor:/structural:/style:/format: must not change test assertions or add tests.
+tidy_first:
+  enabled: true
+
+# PR description from the slice manifest (E3); every new type needs a purpose (E4).
+pr_description:
+  enabled: true
+  require_purpose: true
+
+# ADR required (G1): a slice with a new interface or module edge needs docs/adr/*.md (Context, Decision, Alternatives).
+adr:
+  enabled: true
+  required: true
+  paths: ["docs/adr/**", "docs/decisions/**"]
+
 return_limit: 3     # max send-backs per slice
 parallel_limit: 3   # max concurrent worktree pipelines over independent slices
 
