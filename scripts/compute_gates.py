@@ -77,7 +77,7 @@ QG_GATES = {
 DEFAULT_DIFF_COVERAGE_MIN = 80
 
 
-def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None, captured=None, plan_conformance=None):
+def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None, captured=None, plan_conformance=None, reports=None):
     """captured: optional dict; categories whose baseline was first captured are added to it."""
     role_name = DEPRECATED_ROLES.get(role_name, role_name)
     if role_name == MERGE_GATE:
@@ -184,6 +184,21 @@ def compute(config, role_name, metrics, baselines, tests_exit, traceability, sta
                 results.append(result(gate, role_name, ok, metric_value=len(offenders), threshold=0,
                                       diagnosis=None if ok else f"{len(offenders)} plan offender(s): {fixes}"))
 
+        elif gate in ("bugfix", "tidy-first", "adr"):
+            key = gate.replace("-", "_")
+            if (config.get(key) or {}).get("enabled", True) is False:
+                results.append(result(gate, role_name, True, diagnosis=f"{gate} disabled by config"))
+                continue
+            found = (reports or {}).get(gate) or []
+            if not found:
+                results.append(result(gate, role_name, False, diagnosis=f"no {gate} report supplied - run its script (see commands/bob-run.md)"))
+                continue
+            offenders = [o for r in found for o in r.get("offenders") or []]
+            ok = all(r.get("passed") for r in found) and not offenders
+            fixes = "; ".join(f"[{o['rule']}] {o['path']}: {o['fix']}" for o in offenders[:10])
+            results.append(result(gate, role_name, ok, metric_value=len(offenders), threshold=0,
+                                  diagnosis=None if ok else f"{len(offenders)} {gate} offender(s): {fixes}"))
+
         elif gate == "gherkin-traceability":
             if not traceability:
                 results.append(result(gate, role_name, False, diagnosis="no traceability data supplied"))
@@ -210,6 +225,8 @@ def main():
     ap.add_argument("--tests-exit", type=int, default=None)
     ap.add_argument("--traceability")
     ap.add_argument("--plan-conformance", dest="plan_conformance")
+    ap.add_argument("--gate-report", action="append", default=[], metavar="GATE=REPORT",
+                    help="report of a 1.9.0 gate script (bugfix, tidy-first, adr); repeatable, bugfix takes the gates and ablation reports")
     ap.add_argument("--stack", default=None,
                      help="stack of the slice being gated (e.g. csharp, python); "
                           "defaults to config's top-level stack. Scopes which tools/ "
@@ -222,6 +239,10 @@ def main():
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8-sig"))
     baselines = load_json_arg(args.baselines)
     captured = {}
+    reports = {}
+    for item in args.gate_report:
+        name, _, ref = item.partition("=")
+        reports.setdefault(name, []).append(load_json_arg(ref))
     results = compute(
         config,
         args.role,
@@ -232,6 +253,7 @@ def main():
         args.stack,
         captured,
         load_json_arg(args.plan_conformance),
+        reports,
     )
     if captured and args.baselines and not args.baselines.lstrip().startswith(("[", "{")):
         merged = {**(baselines or {}), **captured}
