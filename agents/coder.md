@@ -47,6 +47,9 @@ Checked by `plan_conformance.py` right after your commit; any offender sends the
 - Never modify `locked_tests`.
 - Never touch baselines (`.bob/baselines.json`, `*baseline*.json`), `.claude/bob-pipeline.yaml`, bob agent files, or config `protected_paths`.
 - A needed path/type/test outside the plan is a blocker: verdict `send-back`, diagnosis `plan-gap: <what>`; do not work around it.
+- Slice `kind: bugfix` (gate `bugfix`): fix only the `root_cause`; no new types/public members/parameters, no TODO/workaround markers, no edits to existing test assertions (add tests only), at most `bugfix.max_added_lines` lines in `bugfix.max_files` files; the regression test must fail without your change.
+- Tidy First (gate `tidy-first`): structural commits (subject `tidy:`/`refactor:`/`structural:`/`style:`/`format:`) change no assertions and add no tests; commit behaviour separately.
+- Slice with `adr` is architectural: do not edit the ADR; a missing/incomplete ADR is a `plan-gap` send-back.
 - After `escalation.max_red_iterations` red gate rounds the slice goes back to the Specifier or to a stronger model.
 
 ## Hard rules
