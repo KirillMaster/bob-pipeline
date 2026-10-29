@@ -1,0 +1,14 @@
+# Slice manifest — written by the Specifier to <bob_root>/.bob/features/<feature>.manifest.yaml, one entry per slice.
+# Enforced mechanically by scripts/plan_conformance.py (gate `plan-conformance`, after the Coder).
+slices:
+  - slice: S1
+    feature_module: "<module name>"
+    allowed_paths:               # files the coder may create/modify (superset of the slice's `files`)
+      - "src/<Module>/**"
+      - "tests/<Module>.Tests/**"
+    new_types:                   # every new top-level type; kind: class|record|interface|struct|enum|type
+      - {name: "<TypeName>", module: "<module name>", kind: class}
+    allowed_new_edges:           # new module dependencies, "A -> B" (architect reads; optional edge_check_command)
+      - "<ModuleA> -> <ModuleB>"
+    locked_tests:                # tests the coder must not touch
+      - "tests/<Module>.Tests/Locked/**"

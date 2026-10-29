@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bob-pipeline slice manifest",
+  "description": "Specifier output per slice (<bob_root>/.bob/features/<feature>.manifest.yaml); consumed by scripts/plan_conformance.py.",
+  "type": "object",
+  "required": ["slices"],
+  "additionalProperties": false,
+  "properties": {
+    "slices": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/slice" }
+    }
+  },
+  "$defs": {
+    "slice": {
+      "type": "object",
+      "required": ["slice", "feature_module", "allowed_paths", "new_types", "allowed_new_edges", "locked_tests"],
+      "additionalProperties": false,
+      "properties": {
+        "slice": { "type": "string", "minLength": 1 },
+        "feature_module": { "type": "string", "minLength": 1 },
+        "allowed_paths": {
+          "description": "Globs of files the coder may create or modify; a superset of the slice's `files`.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "new_types": {
+          "description": "Every new top-level type the slice introduces.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "module", "kind"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "module": { "type": "string", "minLength": 1 },
+              "kind": { "type": "string", "enum": ["class", "record", "interface", "struct", "enum", "type"] }
+            }
+          }
+        },
+        "allowed_new_edges": {
+          "description": "Declared new module dependencies, \"A -> B\".",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^\\S+ -> \\S+$" }
+        },
+        "locked_tests": {
+          "description": "Globs of tests the coder must not touch.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

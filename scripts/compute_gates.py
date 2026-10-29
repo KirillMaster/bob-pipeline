@@ -4,7 +4,7 @@
 Usage:
     python scripts/compute_gates.py --config <bob-pipeline.yaml> --role <role> \
         --metrics <metrics.json> [--baselines <baselines.json>] [--tests-exit <int>] \
-        [--traceability <traceability.json>]
+        [--traceability <traceability.json>] [--plan-conformance <report.json>]
 
 Inputs:
     metrics.json      list of {"category", "metric", "metric_value"} from parse_reports.py
@@ -14,6 +14,7 @@ Inputs:
                       this path (when it is a file path), so the next run compares against it
     --tests-exit      exit code of the project test suite run (for the tests-green gate)
     traceability.json {"scenario_ids": [...], "traced_ids": [...]} for gherkin-traceability
+    --plan-conformance  report of scripts/plan_conformance.py (for the plan-conformance gate)
 
 Output (stdout): JSON list of GateResult objects:
     {"gate", "role", "metric_value", "threshold", "baseline", "passed", "diagnosis"}
@@ -76,7 +77,7 @@ QG_GATES = {
 DEFAULT_DIFF_COVERAGE_MIN = 80
 
 
-def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None, captured=None):
+def compute(config, role_name, metrics, baselines, tests_exit, traceability, stack=None, captured=None, plan_conformance=None):
     """captured: optional dict; categories whose baseline was first captured are added to it."""
     role_name = DEPRECATED_ROLES.get(role_name, role_name)
     if role_name == MERGE_GATE:
@@ -171,6 +172,18 @@ def compute(config, role_name, metrics, baselines, tests_exit, traceability, sta
                 results.append(result(gate, role_name, ok, metric_value=value, baseline=baseline,
                                       diagnosis=None if ok else f"{category} {value} worse than baseline {baseline}: refactor before handoff (in-place repair)"))
 
+        elif gate == "plan-conformance":
+            if not (config.get("plan_conformance") or {}).get("enabled", True):
+                results.append(result(gate, role_name, True, diagnosis="plan conformance disabled by config"))
+            elif not plan_conformance:
+                results.append(result(gate, role_name, False, diagnosis="no plan-conformance report supplied - run scripts/plan_conformance.py"))
+            else:
+                offenders = plan_conformance.get("offenders") or []
+                ok = bool(plan_conformance.get("passed")) and not offenders
+                fixes = "; ".join(f"[{o['rule']}] {o['path']}: {o['fix']}" for o in offenders[:10])
+                results.append(result(gate, role_name, ok, metric_value=len(offenders), threshold=0,
+                                      diagnosis=None if ok else f"{len(offenders)} plan offender(s): {fixes}"))
+
         elif gate == "gherkin-traceability":
             if not traceability:
                 results.append(result(gate, role_name, False, diagnosis="no traceability data supplied"))
@@ -196,6 +209,7 @@ def main():
     ap.add_argument("--baselines")
     ap.add_argument("--tests-exit", type=int, default=None)
     ap.add_argument("--traceability")
+    ap.add_argument("--plan-conformance", dest="plan_conformance")
     ap.add_argument("--stack", default=None,
                      help="stack of the slice being gated (e.g. csharp, python); "
                           "defaults to config's top-level stack. Scopes which tools/ "
@@ -217,6 +231,7 @@ def main():
         load_json_arg(args.traceability),
         args.stack,
         captured,
+        load_json_arg(args.plan_conformance),
     )
     if captured and args.baselines and not args.baselines.lstrip().startswith(("[", "{")):
         merged = {**(baselines or {}), **captured}

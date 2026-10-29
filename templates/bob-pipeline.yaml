@@ -6,7 +6,9 @@ version: "1"
 project_name: "{{PROJECT_NAME}}"
 stack: "{{STACK}}"
 
-# Ordered pipeline. Model is passed to the subagent as an explicit parameter
+# Ordered pipeline. Plan hard, code cheap: keep specifier/architect on a strong model and set the
+# coder to a cheap one (e.g. `model: haiku`); quality is enforced by the mechanical gates, not prompts.
+# Model is passed to the subagent as an explicit parameter
 # at spawn time (frontmatter model is ignored, Claude Code bug #44385).
 # specifier and coder are non-skippable: a per-run skip request for them is refused.
 roles:
@@ -17,7 +19,7 @@ roles:
   - name: coder
     model: sonnet
     enabled: true
-    gates: [tests-green, lint, format, architecture]
+    gates: [plan-conformance, tests-green, lint, format, architecture]
   # architect = behavior-preserving refactor (complexity/duplication toward baseline)
   # + module boundary review, one pass. Legacy `cleaner` is accepted and treated as architect.
   - name: architect
@@ -113,6 +115,22 @@ mutation:
 # Hardener and QA run concurrently after the architect (D16); false = sequential.
 parallel:
   hardener_qa: true
+
+# Plan-conformance gate (1.8.0), right after the Coder: the diff must stay inside the Specifier's slice
+# manifest (allowed_paths, declared new_types, locked_tests, no protected files). Disable with enabled: false.
+plan_conformance:
+  enabled: true
+  # protected_paths: ["tests/**/ArchitectureTests.cs"]   # extra files the coder must never touch
+  # module_paths: {Billing: ["src/Billing/**"]}          # module -> where its new types may live
+  # edge_check_command: "dotnet test --no-restore --filter Category=Architecture"
+
+# After max_red_iterations consecutive red gate iterations the slice leaves the coder loop:
+# on_exhaust specifier = back to the Specifier ("plan infeasible" + gate report);
+# on_exhaust stronger_model = one more coder retry on escalation_model.
+escalation:
+  max_red_iterations: 3
+  on_exhaust: specifier
+  # escalation_model: opus
 
 return_limit: 3     # max send-backs per slice
 parallel_limit: 3   # max concurrent worktree pipelines over independent slices

@@ -117,6 +117,13 @@ def validate_config(config_path: Path, schema_path: Path, warnings=None) -> list
         hardener = next((r for r in config["roles"] if r["name"] == "hardener"), None)
         if hardener and hardener["enabled"] and not hardener.get("degradation"):
             violations.append({"path": "roles/hardener", "message": "mutation category disabled but hardener has no 'degradation' behavior defined"})
+    esc = config.get("escalation") or {}
+    if esc.get("on_exhaust") == "stronger_model" and not esc.get("escalation_model"):
+        violations.append({"path": "escalation", "message": "on_exhaust 'stronger_model' requires 'escalation_model'"})
+    if (config.get("plan_conformance") or {}).get("enabled", True) is False:
+        for r in config["roles"]:
+            if "plan-conformance" in r.get("gates", []):
+                warnings.append({"path": f"roles/{r['name']}/gates", "message": "plan-conformance is listed but plan_conformance.enabled is false: the gate is skipped"})
     return violations
 
 

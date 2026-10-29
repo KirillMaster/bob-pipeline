@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.0
+
+Hard planning, cheap coder: the Specifier plans each slice rigidly, a cheap model (haiku/sonnet) codes, and quality is enforced only by mechanical gates.
+
+- **Slice manifest.** Specifier writes `<bob_root>/.bob/features/<feature>.manifest.yaml` per slice: `feature_module`, `allowed_paths`, `new_types` (`{name, module, kind}`), `allowed_new_edges`, `locked_tests`. New `schemas/slice-manifest.schema.json`, `templates/slice-manifest.yaml`; the return JSON gains `manifest_file`; the manifest is checksummed with the other approved artifacts.
+- **Gate `plan-conformance`** (new `scripts/plan_conformance.py`, coder gate, right after the Coder and before the Architect). Fails with a JSON report (offenders + one-line `fix`) on: file outside `allowed_paths`, undeclared new top-level production type (C#/TS/Python regex; test files exempt via `test_paths`) or wrong kind, type outside its `module_paths`, any `locked_tests` change, protected files (baselines, `.claude/bob-pipeline.yaml`, bob agents, config `protected_paths`), failing optional `edge_check_command`. Failure = send-back to the Coder with the report. `compute_gates.py --plan-conformance <report.json>`.
+- **Escalation.** Config `escalation: {max_red_iterations, on_exhaust: specifier|stronger_model, escalation_model}`; `parallel_plan.py escalate` decides after N consecutive red gate iterations (slice state `red_iterations`): back to the Specifier (`plan-infeasible`) or one Coder retry on `escalation_model`. Coder prompt: never relax gates, edit baselines/config or locked tests.
+- **Models.** Cheap coder = existing `roles[coder].model` (e.g. `haiku`); defaults unchanged. Architect reads `allowed_new_edges` (`undeclared-edge` send-back).
+- Config/`validate_config.py`: `plan_conformance`, `escalation`, gate name `plan-conformance`; `on_exhaust: stronger_model` requires `escalation_model`. `/bob-init`: interview item + upgrade step `plan` (default on). `upgrade_project.py`: step `plan`, backups `bob-pipeline.yaml.bak-1.7` and `<role>.md.bak-1.7`.
+- Rollout: `python scripts/upgrade_project.py --project <path> --steps agents,plan --old-ref 191c51c` (1.7.0 templates; the config key additions need no manual edit).
+
 ## 1.7.0
 - Roles: "never run integration tests" generalized to heavy tests (integration/load/fuzz/perf); coder/qa may run a heavy test they wrote/changed in the slice by filter, once.
 

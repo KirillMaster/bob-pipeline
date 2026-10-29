@@ -107,6 +107,20 @@ def qa_rerun(changed, qa_texts):
     return ids
 
 
+def escalate(escalation, red_iterations):
+    """After max_red_iterations consecutive red gate iterations: route to the specifier or retry the coder on a stronger model."""
+    if not escalation:
+        return {"escalate": False}
+    limit = escalation.get("max_red_iterations", 3)
+    if red_iterations < limit:
+        return {"escalate": False, "red_iterations": red_iterations, "limit": limit}
+    action = escalation.get("on_exhaust", "specifier")
+    out = {"escalate": True, "red_iterations": red_iterations, "limit": limit, "action": action}
+    if action == "stronger_model":
+        out["model"] = escalation.get("escalation_model")
+    return out
+
+
 def csv(value):
     return [v.strip() for v in (value or "").split(",") if v.strip()]
 
@@ -123,8 +137,14 @@ def main():
     q = sub.add_parser("qa-rerun")
     q.add_argument("--changed", nargs="*", default=[])
     q.add_argument("--qa", nargs="+", required=True)
+    e = sub.add_parser("escalate")
+    e.add_argument("--config", required=True)
+    e.add_argument("--red-iterations", type=int, required=True)
     args = ap.parse_args()
-    if args.cmd == "batch":
+    if args.cmd == "escalate":
+        cfg = yaml.safe_load(Path(args.config).read_text(encoding="utf-8-sig")) or {}
+        out = escalate(cfg.get("escalation"), args.red_iterations)
+    elif args.cmd == "batch":
         data = yaml.safe_load(Path(args.slices).read_text(encoding="utf-8-sig"))
         slices = data["slices"] if isinstance(data, dict) else data
         out = batch(slices, csv(args.merged), csv(args.running), csv(args.failed), args.limit)

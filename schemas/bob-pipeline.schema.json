@@ -207,6 +207,64 @@
     "night_mode_default": {
       "type": "boolean"
     },
+    "plan_conformance": {
+      "description": "Plan-conformance gate (1.8.0): the coder's diff must stay inside the Specifier's slice manifest (scripts/plan_conformance.py).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "protected_paths": {
+          "description": "Extra globs the coder must never touch (arch layout files etc.); baselines, bob config/agents/state are always protected.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "test_paths": {
+          "description": "Globs of test files whose types need no new_types entry (default: common tests/ dirs and *Tests.cs, *.test.*, *.spec.*, test_*.py).",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "module_paths": {
+          "description": "Module name -> globs where its new types may live.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "edge_check_command": {
+          "description": "Optional command run in the slice worktree (e.g. architecture tests); non-zero exit fails the gate.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "escalation": {
+      "description": "After max_red_iterations consecutive red gate iterations the slice leaves the coder loop (1.8.0).",
+      "type": "object",
+      "required": ["max_red_iterations", "on_exhaust"],
+      "additionalProperties": false,
+      "properties": {
+        "max_red_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "on_exhaust": {
+          "description": "specifier = send the slice back to the Specifier (plan infeasible + gate report); stronger_model = retry the Coder on escalation_model.",
+          "type": "string",
+          "enum": ["specifier", "stronger_model"]
+        },
+        "escalation_model": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "scout": {
       "type": "object",
       "additionalProperties": false,
@@ -311,7 +369,8 @@
               "format",
               "architecture",
               "diff-coverage",
-              "constitution-traceability"
+              "constitution-traceability",
+              "plan-conformance"
             ]
           }
         },
