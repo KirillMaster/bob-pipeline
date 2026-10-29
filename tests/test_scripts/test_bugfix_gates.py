@@ -276,3 +276,59 @@ def test_schemas_accept_new_keys_and_reject_bad_bugfix():
     assert not list(jsonschema.Draft202012Validator(cfg_schema).iter_errors(cfg))
     cfg["bugfix"]["ablation"] = "sometimes"
     assert list(jsonschema.Draft202012Validator(cfg_schema).iter_errors(cfg))
+
+
+def test_pure_rename_of_test_file_is_not_a_test_edit(tmp_path):
+    repo, base = make_repo(tmp_path)
+    git(repo, "mv", "tests/Billing.Tests/CalcTests.cs", "tests/Billing.Tests/CalcRenamedTests.cs")
+    write(repo, CALC, FIXED_CALC)
+    commit(repo)
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest())
+    assert r.returncode == 0, r.stdout
+    git(repo, "mv", "tests/Billing.Tests/CalcRenamedTests.cs", "tests/Billing.Tests/CalcFinalTests.cs")
+    commit(repo, "tidy: rename test")
+    assert run_script(tmp_path, "tidy_first.py", repo, base)[0].returncode == 0
+    write(repo, "tests/Billing.Tests/CalcFinalTests.cs", "[Fact]\npublic void Adds() {\n    Assert.Equal(9, Calc.Add(2, 3));\n}\n")
+    commit(repo, "tidy: sneaky")
+    assert rules(run_script(tmp_path, "tidy_first.py", repo, base)[1]) == ["structural-edits-assertion"]
+
+
+def test_regression_filter_comes_from_head_files_not_the_diff(tmp_path):
+    repo, base = make_repo(tmp_path)
+    write(repo, CALC, FIXED_CALC)
+    commit(repo)
+    cfg = {"test_command": 'dotnet test --no-restore --filter "{filter}" {tests}'}
+    cmd = bg.regression_command(manifest()["slices"][0], repo, base, "HEAD", cfg)
+    assert "FullyQualifiedName~Add_returns_sum" in cmd and 'filter ""' not in cmd and REGRESSION in cmd
+    write(repo, REGRESSION, "// no test methods here\n")
+    commit(repo, "empty regression")
+    assert bg.regression_command(manifest()["slices"][0], repo, base, "HEAD", cfg) is None
+    assert bg.regression_command(manifest()["slices"][0], repo, base, "HEAD", {"test_command": "run {tests}"}) is not None
+
+
+def test_regression_paths_are_shell_quoted(tmp_path):
+    repo, base = make_repo(tmp_path)
+    mf = manifest(regression_test=["tests/My Tests/R.cs"])["slices"][0]
+    cmd = bg.regression_command(mf, repo, base, "HEAD", {"test_command": "run {tests}"})
+    assert cmd.startswith("run ") and cmd[4] in "'\"" and "My Tests/R.cs" in cmd
+
+
+def test_non_ascii_paths_are_matched(tmp_path):
+    import plan_conformance as pc
+    repo, base = make_repo(tmp_path)
+    write(repo, "src/Billing/Расчёт.cs", "namespace Billing;\nclass Calc2 { }\n")
+    git(repo, "mv", "tests/Billing.Tests/CalcTests.cs", "tests/Billing.Tests/Тесты.cs")
+    commit(repo)
+    files = pc.changed_files(repo, base, "HEAD")
+    assert ("A", "src/Billing/Расчёт.cs", None) in files
+    assert ("R", "tests/Billing.Tests/Тесты.cs", "tests/Billing.Tests/CalcTests.cs") in files
+
+
+def test_tidy_first_checks_root_commit(tmp_path):
+    repo = tmp_path / "root"
+    repo.mkdir()
+    git(repo, "init", "-q")
+    write(repo, "tests/Billing.Tests/NewTests.cs", "[Fact]\npublic void Brand_new() { }\n")
+    commit(repo, "tidy: initial")
+    sha = git(repo, "rev-parse", "HEAD")
+    assert [o["rule"] for o in tf.check_commit(repo, sha, tf.DEFAULT_TEST_PATHS)] == ["structural-adds-test"]

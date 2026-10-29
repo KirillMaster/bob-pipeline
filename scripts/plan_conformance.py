@@ -89,15 +89,17 @@ def git(repo, *args, check=True):
 
 def changed_files(repo, base, head):
     """[(status, path, old_path)] with status in A/M/D/R."""
-    out = git(repo, "diff", "--name-status", "-M", "-M", f"{base}..{head}").stdout
-    files = []
-    for line in out.splitlines():
-        parts = line.split("\t")
-        status = parts[0][0]
+    out = git(repo, "diff", "--name-status", "-z", "-M", f"{base}..{head}").stdout
+    tokens = out.split("\0")
+    files, i = [], 0
+    while i < len(tokens) and tokens[i]:
+        status = tokens[i][0]
         if status in ("R", "C"):
-            files.append(("R" if status == "R" else "A", parts[2], parts[1]))
+            files.append(("R" if status == "R" else "A", tokens[i + 2], tokens[i + 1]))
+            i += 3
         else:
-            files.append((status, parts[1], None))
+            files.append((status, tokens[i + 1], None))
+            i += 2
     return files
 
 

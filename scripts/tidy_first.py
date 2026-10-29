@@ -26,6 +26,7 @@ import yaml
 from diffkit import DEFAULT_TEST_PATHS, TEST_METHOD, changed_files, git, hunks, is_test, offender, test_edit_offenders
 from plan_conformance import load_manifest
 
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 DEFAULT_PREFIXES = ["tidy", "refactor", "structural", "style", "format"]
 
 
@@ -35,12 +36,13 @@ def is_structural(subject, prefixes):
 
 def check_commit(repo, sha, test_paths):
     out = []
-    for o in test_edit_offenders(repo, f"{sha}~1", sha, test_paths, "structural-edits-assertion",
+    parent = f"{sha}~1" if git(repo, "rev-parse", "--verify", "-q", f"{sha}~1", check=False).returncode == 0 else EMPTY_TREE
+    for o in test_edit_offenders(repo, parent, sha, test_paths, "structural-edits-assertion",
                                  "a structural commit must not change what the tests assert; move the change to a behavioural commit"):
         out.append({**o, "detail": f"{sha[:8]}: {o['detail']}"})
-    for status, path, _ in changed_files(repo, f"{sha}~1", sha):
+    for status, path, _ in changed_files(repo, parent, sha):
         if status in ("A", "M") and is_test(path, test_paths):
-            if any(TEST_METHOD.search(l) for h in hunks(repo, f"{sha}~1", sha, path) for l in h["added"]):
+            if any(TEST_METHOD.search(l) for h in hunks(repo, parent, sha, path) for l in h["added"]):
                 out.append(offender("structural-adds-test", path, f"{sha[:8]}: structural commit adds a test method",
                                     "commit new tests in a behavioural commit without the tidy/refactor prefix"))
     return out

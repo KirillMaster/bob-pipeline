@@ -33,7 +33,7 @@ from pathlib import Path
 
 import yaml
 
-from diffkit import DEFAULT_TEST_PATHS, changed_files, exists_at, git, hunks, is_test, matches, offender, run, substantive, test_edit_offenders
+from diffkit import DEFAULT_TEST_PATHS, changed_files, exists_at, git, hunks, is_test, matches, offender, quote, run, substantive, test_edit_offenders
 from plan_conformance import load_manifest
 
 DEFAULTS = {"max_added_lines": 30, "max_files": 2, "runs": 3}
@@ -111,16 +111,16 @@ def check(manifest, repo, base, head, cfg=None, test_paths=None):
     return offenders, [p for _, p in prod]
 
 
-def regression_names(repo, base, head, reg):
+def regression_names(repo, head, reg):
+    """Test method names declared in the regression test files at head (the Specifier commits them before the Coder)."""
     names = []
-    for _, path, _ in changed_files(repo, base, head):
-        if matches(path, reg):
-            for h in hunks(repo, base, head, path):
-                for line in h["added"]:
-                    m = TEST_NAME.search(line)
-                    if m:
-                        names.append(m.group(1) or m.group(2))
-    return names
+    for path in git(repo, "ls-tree", "-r", "--name-only", "-z", head).stdout.split("\0"):
+        if path and matches(path, reg):
+            for line in git(repo, "show", f"{head}:{path}", check=False).stdout.splitlines():
+                m = TEST_NAME.search(line)
+                if m:
+                    names.append(m.group(1) or m.group(2))
+    return sorted(set(names))
 
 
 def regression_command(manifest, repo, base, head, cfg):
@@ -128,9 +128,13 @@ def regression_command(manifest, repo, base, head, cfg):
     reg = manifest.get("regression_test") or []
     if not cfg.get("test_command") or not reg or manifest.get("test_exempt"):
         return None
-    names = regression_names(repo, base, head, reg)
-    flt = "|".join("FullyQualifiedName~" + n for n in names)
-    return cfg["test_command"].replace("{tests}", " ".join(reg)).replace("{filter}", flt)
+    command = cfg["test_command"]
+    if "{filter}" in command:
+        names = regression_names(repo, head, reg)
+        if not names:
+            return None
+        command = command.replace("{filter}", "|".join("FullyQualifiedName~" + n for n in names))
+    return command.replace("{tests}", " ".join(quote(p) for p in reg))
 
 
 def run_tests(manifest, repo, base, head, cfg):

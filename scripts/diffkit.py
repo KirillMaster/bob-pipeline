@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Shared diff helpers for the 1.9.0 gates (bugfix_gates, bugfix_ablation, tidy_first): hunks, comment filter, test-edit check."""
+import os
 import re
+import shlex
 import subprocess
 
 from plan_conformance import DEFAULT_TEST_PATHS, changed_files, git, matches, offender  # noqa: F401
@@ -15,9 +17,9 @@ def exists_at(repo, ref, path):
     return git(repo, "cat-file", "-e", f"{ref}:{path}", check=False).returncode == 0
 
 
-def hunks(repo, base, head, path):
+def hunks(repo, base, head, *paths):
     """[{old_start, old_count, new_start, new_count, removed, added, lines, patch}] of `git diff -U0 base..head -- path`."""
-    out = git(repo, "diff", "-U0", "--no-color", f"{base}..{head}", "--", path).stdout
+    out = git(repo, "diff", "-U0", "--no-color", "-M", f"{base}..{head}", "--", *paths).stdout
     header, result, cur = [], [], None
     for line in out.splitlines():
         m = HUNK.match(line)
@@ -56,11 +58,16 @@ def test_edit_offenders(repo, base, head, test_paths, rule, fix_hint):
         if status == "D":
             out.append(offender(rule, path, "existing test file deleted", f"restore {path}; {fix_hint}"))
         elif status in ("M", "R"):
-            gone = [l for h in hunks(repo, base, head, old or path) for l in substantive(h["removed"]) if ASSERT_OR_LITERAL.search(l)]
+            pair = (old, path) if old else (path,)
+            gone = [l for h in hunks(repo, base, head, *pair) for l in substantive(h["removed"]) if ASSERT_OR_LITERAL.search(l)]
             if gone:
                 out.append(offender(rule, path, f"{len(gone)} assertion/literal line(s) removed or changed, e.g. `{gone[0].strip()[:80]}`",
                                     f"restore the original lines in {path}; {fix_hint}"))
     return out
+
+
+def quote(path):
+    return subprocess.list2cmdline([path]) if os.name == "nt" else shlex.quote(path)
 
 
 def run(command, cwd, timeout=900):
