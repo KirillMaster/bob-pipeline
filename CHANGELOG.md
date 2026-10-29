@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+- Roles: "never run integration tests" generalized to heavy tests (integration/load/fuzz/perf); coder/qa may run a heavy test they wrote/changed in the slice by filter, once.
+
+- perf: prompt diet - agents and commands rewritten in terse imperative English (Russian removed, rationale/history and duplicate rules dropped, design-id references removed); all rules, paths, commands, placeholders, thresholds, schema fields, output formats and send-back conditions kept. Frontmatter `description` shortened (<=200 chars); other frontmatter untouched.
+- Size (chars, before -> after): architect 5910 -> 4610, coder 6742 -> 5390, hardener 6982 -> 5821, qa 5486 -> 4617, scout 4008 -> 3005, specifier 5583 -> 4703, bob-config 3171 -> 2881, bob-init 9773 -> 8795, bob-run 21496 -> 18057; total 69151 -> 57879 (-16%).
+- Rollout: `python scripts/upgrade_project.py --project <path> --steps agents --old-ref v1.6.2`
+
 ## 1.6.2
 
 - coder and hardener `maxTurns` 100 -> 80 (cap for broad roles; the coder's self-stop at ~60 calls stays). Rollout: `python scripts/upgrade_project.py --project <path> --steps agents --old-ref v1.6.1`.

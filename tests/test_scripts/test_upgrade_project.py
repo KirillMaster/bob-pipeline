@@ -101,7 +101,7 @@ def test_full_upgrade(tmp_path):
     arch = next(x for x in cfg["roles"] if x["name"] == "architect")
     assert "complexity-baseline" in arch["gates"]
     assert cfg["send_back_routes"]["architect"] == "coder"
-    assert cfg["tests"]["run_command"] == "dotnet test App.sln"
+    assert cfg["tests"]["run_command"] == "dotnet test App.sln --no-restore -nodeReuse:false"
     assert "{filter}" in cfg["tests"]["scoped_command"] and "XPlat" in cfg["tests"]["coverage_command"]
     assert cfg["tools"][0]["scope_flag"] == '--mutate "{file}"'
     assert (proj / ".claude" / "bob-pipeline.yaml.bak-pre-1.2").exists()

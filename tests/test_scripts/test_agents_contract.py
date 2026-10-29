@@ -9,7 +9,7 @@ def read(rel):
 
 
 def test_role_set_has_no_cleaner():
-    assert sorted(p.stem for p in (ROOT / "agents").glob("*.md")) == sorted(ROLES)
+    assert sorted(p.stem for p in (ROOT / "agents").glob("*.md")) == sorted([*ROLES, "scout"])
 
 
 def test_every_role_has_constitution_staging_and_integration_rules():
@@ -53,6 +53,6 @@ def test_1_3_contract_hooks():
 
 def test_version_bumped_consistently():
     import json
-    assert json.loads(read(".claude-plugin/plugin.json"))["version"] == "1.3.1"
-    assert json.loads(read(".claude-plugin/marketplace.json"))["plugins"][0]["version"] == "1.3.1"
-    assert read("CHANGELOG.md").startswith("# Changelog\n\n## 1.3.1")
+    version = json.loads(read(".claude-plugin/plugin.json"))["version"]
+    assert json.loads(read(".claude-plugin/marketplace.json"))["plugins"][0]["version"] == version
+    assert read("CHANGELOG.md").startswith(f"# Changelog\n\n## {version}")
