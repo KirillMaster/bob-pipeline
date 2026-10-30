@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KISS gates for a `kind: bugfix` slice (1.9.0, K1-K5, K7, K8 + optional K2/K3 test runs).
+"""KISS gates for a `kind: bugfix` slice (K1-K5, K7, K8 + optional K2/K3 test runs; PublicApi K4 since 1.10.0).
 
 Usage:
     python scripts/bugfix_gates.py --manifest <manifest.yaml> --repo <worktree> --base <ref> \
@@ -21,7 +21,11 @@ Rules (offenders carry a one-line `fix`):
     complexity-delta      decision points in a changed production file grew by more than bugfix.max_complexity_delta (K8)
     nesting-delta         max indentation depth of a changed production file grew by more than bugfix.max_nesting_delta (K8)
     fix-not-needed        --run-tests: regression test still passes with root_cause files reverted to base (K3)
-    regression-red        --run-tests: regression test fails on head (K2)
+    regression-red        --run-tests: regression test fails on head
+    green-on-base         --run-tests: regression test passes on the clean base with only the test files from head (K2)
+    red-not-assertion     --run-tests: red on base is a compile error or a timeout, not an assertion/runtime failure; seam-required needs manifest seam (K2)
+    new-public-api        added entry in PublicAPI.Unshipped.txt (Roslyn PublicApiAnalyzers RS0016 list) outside allow: new-api (K4)
+Warnings (not offenders): frame-outside-diff = K3 failure output names no changed production file (K1 hint).
 
 Exit 0 = pass (also when the slice is not a bugfix: applicable=false), 1 = offenders, 2 = usage/manifest error.
 """
@@ -29,6 +33,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -86,6 +91,22 @@ def root_cause_files(manifest):
     return [rc.split("#")[0]] if rc else []
 
 
+def public_api_offenders(repo, base, head, files):
+    """K4 via Roslyn: PublicApiAnalyzers keep every public member in PublicAPI.Unshipped.txt; an added entry is a new/changed public signature."""
+    out = []
+    for status, path, _ in files:
+        if status == "D" or Path(path).name != "PublicAPI.Unshipped.txt":
+            continue
+        for h in hunks(repo, base, head, path):
+            removed = {l.strip() for l in h["removed"]}
+            for line in h["added"]:
+                entry = line.strip()
+                if entry and not entry.startswith(("#", "*REMOVED*")) and entry not in removed:
+                    out.append(offender("new-public-api", path, f"public API entry added: `{entry[:100]}`",
+                                        "reuse an existing member or return send-back so the Specifier allows new-api"))
+    return out
+
+
 def check(manifest, repo, base, head, cfg=None, test_paths=None):
     cfg = {**DEFAULTS, **(cfg or {})}
     test_paths = test_paths or DEFAULT_TEST_PATHS
@@ -127,6 +148,8 @@ def check(manifest, repo, base, head, cfg=None, test_paths=None):
                 if "new-api" not in allow and ((suffix == ".cs" and CS_MEMBER.match(line)) or (suffix == ".py" and PY_DEF.match(line))) and signature(line) not in kept:
                     offenders.append(offender("new-signature", path, f"new public member: `{line.strip()[:80]}`",
                                               "reuse an existing member or return send-back so the Specifier allows new-api"))
+    if "new-api" not in allow:
+        offenders += public_api_offenders(repo, base, head, files)
     if "test-edit" not in allow:
         offenders += test_edit_offenders(repo, base, head, test_paths, "test-edited", "do not weaken existing tests, add a new test instead")
 
@@ -168,6 +191,48 @@ def regression_command(manifest, repo, base, head, cfg):
     return command.replace("{tests}", " ".join(quote(p) for p in reg))
 
 
+COMPILE_ERROR = re.compile(r"\berror\s+(?:CS|MSB|NETSDK)\d+|Build FAILED|SyntaxError|ModuleNotFoundError|ImportError|NameError|cannot find symbol", re.I)
+
+
+def run_capture(command, cwd, timeout=900):
+    try:
+        r = subprocess.run(command, shell=True, cwd=str(cwd), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+    except subprocess.TimeoutExpired:
+        return 124, ""
+
+
+def classify(code, output):
+    """pass | timeout | compile | assertion"""
+    if code == 0:
+        return "pass"
+    if code == 124:
+        return "timeout"
+    return "compile" if COMPILE_ERROR.search(output) else "assertion"
+
+
+def run_all(cmd, cwd, runs):
+    results = [run_capture(cmd, cwd) for _ in range(runs)]
+    return [classify(c, o) for c, o in results], "\n".join(o for _, o in results)
+
+
+def red_on_base(manifest, repo, base, head, cmd, runs, tmp):
+    """K2: clean base + only the regression test files from head; must fail by assertion in every run."""
+    wt = tmp / "base"
+    git(repo, "worktree", "add", "--detach", str(wt), base)
+    reg = manifest.get("regression_test") or []
+    for path in git(repo, "ls-tree", "-r", "--name-only", "-z", head).stdout.split("\0"):
+        if path and matches(path, reg):
+            git(wt, "checkout", head, "--", path)
+    kinds, _ = run_all(cmd, wt, runs)
+    if "pass" in kinds:
+        return [offender("green-on-base", "-", "regression test passes on the clean base", "the test does not reproduce the bug; return send-back so the Specifier writes a red test")]
+    if "timeout" in kinds or ("compile" in kinds and not manifest.get("seam")):
+        return [offender("red-not-assertion", "-", f"red on base is {'a timeout' if 'timeout' in kinds else 'a compile error'}, not an assertion failure",
+                         "the Specifier must commit a seam stub (manifest seam) so the test compiles and fails by assertion")]
+    return []
+
+
 def run_tests(manifest, repo, base, head, cfg):
     cmd = regression_command(manifest, repo, base, head, cfg)
     if not cmd:
@@ -177,19 +242,28 @@ def run_tests(manifest, repo, base, head, cfg):
         return [offender("regression-red", "-", f"regression test fails on head (of {runs} runs)", "make the fix pass the regression test")], {"command": cmd}
     tmp = Path(tempfile.mkdtemp(prefix="bob-k3-"))
     wt = tmp / "wt"
-    offenders = []
+    offenders, info = [], {"command": cmd}
     try:
+        offenders += red_on_base(manifest, repo, base, head, cmd, runs, tmp)
         git(repo, "worktree", "add", "--detach", str(wt), head)
         for p in root_cause_files(manifest):
             if exists_at(repo, base, p):
                 git(wt, "checkout", base, "--", p)
-        if any(run(cmd, wt) == 0 for _ in range(runs)):
+        kinds, output = run_all(cmd, wt, runs)
+        if "pass" in kinds:
             offenders.append(offender("fix-not-needed", "-", "regression test passes with root_cause files reverted to base",
                                       "the test does not capture the bug or the diff is not the fix; return send-back"))
+        elif "compile" in kinds or "timeout" in kinds:
+            info["k3"] = "skipped: revert does not compile or times out (seam case), red on clean base checked by K2"
+        else:
+            names = {Path(p).name for _, p, _ in changed_files(repo, base, head) if not is_test(p, DEFAULT_TEST_PATHS)}
+            if names and not any(n in output for n in names):
+                info["warnings"] = [offender("frame-outside-diff", "-", "failure output names no changed production file", "check that root_cause is the file that fails (K1)")]
     finally:
         git(repo, "worktree", "remove", "--force", str(wt), check=False)
+        git(repo, "worktree", "remove", "--force", str(tmp / "base"), check=False)
         shutil.rmtree(tmp, ignore_errors=True)
-    return offenders, {"command": cmd}
+    return offenders, info
 
 
 def main():
@@ -217,6 +291,8 @@ def main():
                 more, info = run_tests(manifest, args.repo, args.base, args.head, cfg)
                 offenders += more
             report = {"passed": not offenders, "applicable": True, "slice": manifest.get("slice"), "offenders": offenders, "files": files, "tests": info}
+            if info.get("warnings"):
+                report["warnings"] = info.pop("warnings")
     except SystemExit as e:
         print(e, file=sys.stderr)
         sys.exit(2)

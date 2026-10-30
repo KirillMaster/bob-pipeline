@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.0
+
+Closes the open KISS bugfix gates K2, K3, K4 (decision C13), all deterministic.
+
+- **K2 red on clean base** (`bugfix_gates.py --run-tests`): a worktree at base plus only the regression test files from head must fail in every `bugfix.runs` run. New offenders: `green-on-base` (test does not reproduce the bug), `red-not-assertion` (red is a compile error or timeout; a compile error is accepted only when the manifest declares `seam`).
+- **K3 revert-fix** hardened: the revert run is classified (pass / timeout / compile / assertion); a compile error or timeout in the revert (seam case) is skipped in favour of K2 instead of counting as red. When the revert fails by assertion but its output names no changed production file, the report gets a `frame-outside-diff` warning (K1 hint, not an offender).
+- **K4 Roslyn signature diff** via the Roslyn PublicApiAnalyzers list: an added entry in any `PublicAPI.Unshipped.txt` (opt-in `PublicApi` of KirillMaster.QualityGates / TenenGroup.QualityGates) is `new-public-api` unless `allow: new-api`. No analyzer inside the plugin; the regex `new-signature` stays for internal members and repos without PublicApiAnalyzers.
+- Not included: K3 needs a seam-free revert to be meaningful (seam cases rely on K2 only); K4 does not see internal members when PublicApiAnalyzers is off; the trx stack-frame check is a text match on the test output.
+
 ## 1.9.0
 
 Run kind `bugfix` and design-quality gates, all deterministic (git / file tree / manifest, no LLM judges). Decisions C13, C23, C25, C31, Z16.

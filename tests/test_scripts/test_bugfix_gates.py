@@ -146,7 +146,7 @@ def test_bugfix_run_tests_red_on_base_green_on_head(tmp_path):
     assert r.returncode == 0, r.stdout
     cfg["bugfix"]["test_command"] = ALWAYS_GREEN
     r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(), cfg, ["--run-tests"])
-    assert rules(rep) == ["fix-not-needed"]
+    assert rules(rep) == ["fix-not-needed", "green-on-base"]
     cfg["bugfix"]["test_command"] = ALWAYS_RED
     r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(), cfg, ["--run-tests"])
     assert rules(rep) == ["regression-red"]
@@ -345,3 +345,42 @@ def test_bugfix_k8_complexity_and_nesting_delta(tmp_path):
     mf = manifest(budget={"max_complexity_delta": 6, "max_nesting_delta": 5, "reason": "guarded rewrite"})
     r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, mf)
     assert r.returncode == 0, r.stdout
+
+
+def failing_unless_fixed(message):
+    return ('python -c "import sys; print(\'' + message + '\'); sys.exit(0 if \'fixed\' in open(\'src/Billing/Calc.cs\').read() else 1)"')
+
+
+def test_k2_compile_error_on_base_needs_seam(tmp_path):
+    repo, base = make_repo(tmp_path)
+    write(repo, CALC, FIXED_CALC)
+    commit(repo)
+    cfg = {"bugfix": {"test_command": failing_unless_fixed("error CS0103: Foo"), "runs": 1}}
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(), cfg, ["--run-tests"])
+    assert rules(rep) == ["red-not-assertion"]
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(seam=["Calc.Add"]), cfg, ["--run-tests"])
+    assert r.returncode == 0, r.stdout
+    assert "skipped" in rep["tests"]["k3"]
+
+
+def test_k3_warns_when_failure_names_no_changed_file(tmp_path):
+    repo, base = make_repo(tmp_path)
+    write(repo, CALC, FIXED_CALC)
+    commit(repo)
+    cfg = {"bugfix": {"test_command": failing_unless_fixed("Failed at Other.cs:1"), "runs": 1}}
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(), cfg, ["--run-tests"])
+    assert r.returncode == 0 and rep["warnings"][0]["rule"] == "frame-outside-diff"
+    cfg["bugfix"]["test_command"] = failing_unless_fixed("Failed at Calc.cs:1")
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(), cfg, ["--run-tests"])
+    assert r.returncode == 0 and "warnings" not in rep
+
+
+def test_k4_public_api_unshipped_entries(tmp_path):
+    repo, base = make_repo(tmp_path)
+    write(repo, CALC, FIXED_CALC)
+    write(repo, "src/Billing/PublicAPI.Unshipped.txt", "#nullable enable\nBilling.Calc.Mul(int a, int b) -> int\n")
+    commit(repo)
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest())
+    assert "new-public-api" in rules(rep)
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(allow=["new-api"]))
+    assert "new-public-api" not in rules(rep)
