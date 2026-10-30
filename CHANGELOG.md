@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.11.0
+
+Mechanical gates outside bob-run (decision C12, G1/E1 from the design-quality spec).
+
+- **`scripts/ci_gates.py --base <ref>`**: one CLI entry for Jenkins, GitHub Actions and local pre-push. Gates `tidy-first` (E1, Z16: git only), `adr` (G1: diff-derived trigger on human PRs = new top-level interface or new csproj `ProjectReference`, ADR with Context/Decision/Alternatives in the diff, waiver `adr-exempt:` in a commit body; manifest triggers when slice manifests exist) and `bugfix` (K1, K4, K5, K7, K8, `--run-tests` adds K2/K3) for changed `.bob/features/*.manifest.yaml` with `kind: bugfix`.
+- Base is the merge-base with the target branch; JSON report, `--annotations github`, `--warn-only` for the report-only rollout, exit 0/1/2. Config optional; sections `adr`, `tidy_first`, `bugfix` honoured.
+- Docs: `docs/ci-gates.md` (Jenkins stage, GitHub Actions job, pinned versions). Tests: `tests/test_scripts/test_ci_gates.py`.
+- No config or agent template changes: `/bob-init --upgrade` from 1.10.0 is a no-op apart from the version.
+- Not ported: K6 ablation, E3/E4 PR description, plan-conformance (bob manifest required).
+
 ## 1.10.0
 
 Closes the open KISS bugfix gates K2, K3, K4 (decision C13), all deterministic.
