@@ -243,7 +243,7 @@
       }
     },
     "bugfix": {
-      "description": "KISS gates for a `bugfix` run kind (1.9.0): scripts/bugfix_gates.py (K1-K5, K7, K8, K2/K3 with --run-tests) and bugfix_ablation.py (K6).",
+      "description": "KISS gates for a `bugfix` run kind (1.9.0): scripts/bugfix_gates.py (K1-K5, K7, K8, K2/K3 with --run-tests, K4 PublicAPI.Unshipped.txt diff) and bugfix_ablation.py (K6).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
