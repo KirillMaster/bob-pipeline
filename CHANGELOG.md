@@ -13,7 +13,8 @@ Run kind `bugfix` and design-quality gates, all deterministic (git / file tree /
 - `compute_gates.py`: gates `bugfix`, `tidy-first`, `adr` read reports via repeatable `--gate-report <gate>=<file>`. Shared diff helpers in `scripts/diffkit.py`.
 - Config: sections `bugfix`, `tidy_first`, `pr_description`, `adr` (defaults in template and schema); `/bob-init --upgrade` (step `plan`) adds them and the three coder gates.
 - Tests: `tests/test_scripts/test_bugfix_gates.py`.
-- Not included: K8 complexity/nesting delta (needs Roslyn measures), K4 Roslyn signature diff (regex heuristic instead).
+- K8 delta: `complexity-delta` / `nesting-delta` offenders when decision points (branch keywords, `&&`, `||`, `??`, `?:`) or max indentation depth of a changed production file grow beyond `bugfix.max_complexity_delta` (3) / `max_nesting_delta` (1); overridable via `budget` with a reason. Language-agnostic text heuristic, not Roslyn cognitive complexity.
+- Not included: K4 Roslyn signature diff (regex heuristic instead).
 
 ## 1.8.0
 

@@ -250,6 +250,8 @@
         "enabled": { "type": "boolean", "default": true },
         "max_added_lines": { "type": "integer", "minimum": 1, "default": 30 },
         "max_files": { "type": "integer", "minimum": 1, "default": 2 },
+        "max_complexity_delta": { "description": "K8: allowed growth of decision points per changed production file.", "type": "integer", "minimum": 0, "default": 3 },
+        "max_nesting_delta": { "description": "K8: allowed growth of max indentation depth per changed production file.", "type": "integer", "minimum": 0, "default": 1 },
         "runs": { "description": "Repeats of the regression test on head and on the reverted base (flake guard).", "type": "integer", "minimum": 1, "maximum": 10, "default": 3 },
         "test_command": { "description": "Runs the regression test; {tests} = its paths, {filter} = dotnet FullyQualifiedName filter of the added test methods.", "type": "string", "minLength": 1 },
         "ablation": { "description": "K6 hunk ablation: off, warn (reported, gate passes) or hard.", "type": "string", "enum": ["off", "warn", "hard"], "default": "warn" }

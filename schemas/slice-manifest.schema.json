@@ -88,6 +88,8 @@
           "properties": {
             "max_added_lines": { "type": "integer", "minimum": 1 },
             "max_files": { "type": "integer", "minimum": 1 },
+            "max_complexity_delta": { "type": "integer", "minimum": 0 },
+            "max_nesting_delta": { "type": "integer", "minimum": 0 },
             "reason": { "type": "string", "minLength": 1 }
           }
         },
