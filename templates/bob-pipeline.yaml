@@ -137,6 +137,8 @@ bugfix:
   enabled: true
   max_added_lines: 30
   max_files: 2
+  max_complexity_delta: 3   # K8: decision-point growth per changed file
+  max_nesting_delta: 1      # K8: indentation-depth growth per changed file
   runs: 3             # regression test repeats (flake guard)
   ablation: warn      # K6 hunk ablation: off | warn | hard
   # test_command: 'dotnet test --no-restore --filter "{filter}"'   # enables the K2/K3 test runs and K6

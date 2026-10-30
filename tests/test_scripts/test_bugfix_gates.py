@@ -332,3 +332,16 @@ def test_tidy_first_checks_root_commit(tmp_path):
     commit(repo, "tidy: initial")
     sha = git(repo, "rev-parse", "HEAD")
     assert [o["rule"] for o in tf.check_commit(repo, sha, tf.DEFAULT_TEST_PATHS)] == ["structural-adds-test"]
+
+
+def test_bugfix_k8_complexity_and_nesting_delta(tmp_path):
+    repo, base = make_repo(tmp_path)
+    body = ["if (a > 0) {", "        if (b > 0) {", "            if (a > b || b > 9) {", "                if (a == 3) { return a + b; }", "            }", "        }", "    }", "    return 0;"]
+    deep = BASE_CALC.replace("return a - b;", "\n".join(body))
+    write(repo, CALC, deep)
+    commit(repo)
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, manifest(budget={"max_added_lines": 30, "reason": "x"}))
+    assert r.returncode == 1 and rules(rep) == ["complexity-delta", "nesting-delta"]
+    mf = manifest(budget={"max_complexity_delta": 6, "max_nesting_delta": 5, "reason": "guarded rewrite"})
+    r, rep = run_script(tmp_path, "bugfix_gates.py", repo, base, mf)
+    assert r.returncode == 0, r.stdout

@@ -52,7 +52,7 @@ DEFAULT_STEPS = "config,agents,support,plan"
 ALL_STEPS = {"config", "agents", "support", "untrack", "qg", "plan"}
 BACKUP_SUFFIX = ".bak-1.7"  # pre-1.8.0 copies of the config and agent files
 PLAN_DEFAULTS = {
-    "bugfix": {"enabled": True, "max_added_lines": 30, "max_files": 2, "runs": 3, "ablation": "warn"},
+    "bugfix": {"enabled": True, "max_added_lines": 30, "max_files": 2, "max_complexity_delta": 3, "max_nesting_delta": 1, "runs": 3, "ablation": "warn"},
     "tidy_first": {"enabled": True},
     "pr_description": {"enabled": True, "require_purpose": True},
     "adr": {"enabled": True, "required": True, "paths": ["docs/adr/**", "docs/decisions/**"]},

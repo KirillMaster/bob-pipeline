@@ -18,6 +18,8 @@ Rules (offenders carry a one-line `fix`):
     test-edited           existing test assertion/literal removed or changed, test file deleted (K5)
     temp-marker           TODO/FIXME/HACK/temporary/workaround/for now/pragma disable/SuppressMessage/[Obsolete] added (K7)
     budget                added production lines or files above bugfix.max_added_lines / max_files without budget.reason (K8)
+    complexity-delta      decision points in a changed production file grew by more than bugfix.max_complexity_delta (K8)
+    nesting-delta         max indentation depth of a changed production file grew by more than bugfix.max_nesting_delta (K8)
     fix-not-needed        --run-tests: regression test still passes with root_cause files reverted to base (K3)
     regression-red        --run-tests: regression test fails on head (K2)
 
@@ -33,10 +35,11 @@ from pathlib import Path
 
 import yaml
 
-from diffkit import DEFAULT_TEST_PATHS, changed_files, exists_at, git, hunks, is_test, matches, offender, quote, run, substantive, test_edit_offenders
+from diffkit import DEFAULT_TEST_PATHS, TRIVIAL, changed_files, exists_at, git, hunks, is_test, matches, offender, quote, run, substantive, test_edit_offenders
 from plan_conformance import load_manifest
 
-DEFAULTS = {"max_added_lines": 30, "max_files": 2, "runs": 3}
+DEFAULTS = {"max_added_lines": 30, "max_files": 2, "runs": 3, "max_complexity_delta": 3, "max_nesting_delta": 1}
+DECISION = re.compile(r"\b(?:if|elif|else\s+if|for|foreach|while|case|catch|except|when|and|or)\b|&&|\|\||\?\?|\?(?=[^?.\[])")
 MARKER = re.compile(r"\b(?:TODO|FIXME|HACK|XXX)\b|temporary|workaround|for now|remove after|#pragma warning disable|SuppressMessage|"
                     r"\[Obsolete\b(?!.*[A-Z]{2,}-\d+)", re.I)
 CS_MEMBER = re.compile(r"^\s*(?:public|internal)\s+(?:(?:static|virtual|override|abstract|sealed|async|new|partial|extern)\s+)*"
@@ -49,6 +52,33 @@ TEST_NAME = re.compile(r"\b(?:void|Task)\s+(\w+)\s*\(|\bdef\s+(test_\w+)")
 def signature(line):
     m = SIG.search(line)
     return (m.group(1), re.sub(r"\s+", " ", m.group(2)).strip()) if m else None
+
+
+def measures(text):
+    """(decision points, max indentation depth) of a source text: language-agnostic stand-in for cognitive complexity / nesting."""
+    lines = [l for l in text.splitlines() if not TRIVIAL.match(l)]
+    depth = 0
+    for l in lines:
+        indent = len(l) - len(l.lstrip(" 	"))
+        depth = max(depth, l[:indent].count("	") + (l[:indent].count(" ") // 4))
+    return sum(len(DECISION.findall(l)) for l in lines), depth
+
+
+def delta_offenders(repo, base, head, files, budget, cfg):
+    out = []
+    max_cc = budget.get("max_complexity_delta", cfg["max_complexity_delta"])
+    max_nest = budget.get("max_nesting_delta", cfg["max_nesting_delta"])
+    for status, path, old in files:
+        before = git(repo, "show", f"{base}:{old or path}", check=False).stdout if status in ("M", "R") else ""
+        after = git(repo, "show", f"{head}:{path}", check=False).stdout
+        (cc0, n0), (cc1, n1) = measures(before), measures(after)
+        if cc1 - cc0 > max_cc:
+            out.append(offender("complexity-delta", path, f"decision points {cc0} -> {cc1} (limit +{max_cc})",
+                                "simplify the fix (no new branches) or return send-back so the Specifier sets budget.max_complexity_delta with a reason"))
+        if n1 - n0 > max_nest:
+            out.append(offender("nesting-delta", path, f"max nesting {n0} -> {n1} (limit +{max_nest})",
+                                "use a guard clause instead of deeper nesting or return send-back so the Specifier sets budget.max_nesting_delta with a reason"))
+    return out
 
 
 def root_cause_files(manifest):
@@ -108,6 +138,7 @@ def check(manifest, repo, base, head, cfg=None, test_paths=None):
     if added_total > max_lines or len(prod) > max_files:
         offenders.append(offender("budget", "-", f"{added_total} added production lines in {len(prod)} file(s); limit {max_lines} lines / {max_files} files",
                                   "shrink the fix to the root cause or return send-back so the Specifier sets budget with a reason"))
+    offenders += delta_offenders(repo, base, head, [(s, p, o) for s, p, o in files if s != "D" and not is_test(p, test_paths)], budget, cfg)
     return offenders, [p for _, p in prod]
 
 
