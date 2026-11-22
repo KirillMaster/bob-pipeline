@@ -37,6 +37,7 @@
             "items": { "type": "string", "pattern": "^T[0-9]+$" }
           },
           "parallelizable": { "type": "boolean" },
+          "status": { "type": "string", "enum": ["pending", "done"], "default": "pending" },
           "entity_refs": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
