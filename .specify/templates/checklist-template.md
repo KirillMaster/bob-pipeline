@@ -34,7 +34,7 @@
 
 ## Notes
 
-- Check items off as completed: `[x]`
+- Ownership: items are reviewer-owned; `[x]` means the reviewer confirmed the requirement-quality criterion is satisfied, NOT that implementation is complete. The generating command leaves every item `[ ]`
 - Add comments or findings inline
 - Link to relevant resources or documentation
 - Items are numbered sequentially for easy reference

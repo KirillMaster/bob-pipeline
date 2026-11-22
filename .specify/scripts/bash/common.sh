@@ -104,7 +104,9 @@ resolve_template() {
 }
 
 get_python3_command() {
-    if command -v python3 >/dev/null 2>&1; then
+    # Verify the interpreter actually runs: on Windows `python3` can resolve to
+    # the Microsoft Store shortcut stub, which exists on PATH but fails to execute.
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" >/dev/null 2>&1; then
         echo "python3"
         return
     fi

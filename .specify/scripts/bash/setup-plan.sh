@@ -11,6 +11,7 @@ for arg in "$@"; do
             echo "  --help     Show this help message"
             exit 0
             ;;
+        *) echo "ERROR: Unknown option '$arg'" >&2; exit 1 ;;
     esac
 done
 

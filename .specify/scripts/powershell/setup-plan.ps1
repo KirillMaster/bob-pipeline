@@ -4,7 +4,9 @@
 [CmdletBinding()]
 param(
     [switch]$Json,
-    [switch]$Help
+    [switch]$Help,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RemainingArgs
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,6 +19,11 @@ if ($Help) {
     exit 0
 }
 
+if ($RemainingArgs.Count -gt 0) {
+    [Console]::Error.WriteLine("ERROR: Unknown option '$($RemainingArgs[0])'")
+    exit 1
+}
+
 # Load common functions
 . "$PSScriptRoot/common.ps1"
 
@@ -27,7 +34,7 @@ $paths = Get-FeaturePathsEnv
 New-Item -ItemType Directory -Path $paths.FEATURE_DIR -Force | Out-Null
 
 # Gate (hard abort): spec.yaml must exist and pass its schema before planning starts
-if (-not (Test-Path $paths.FEATURE_SPEC -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $paths.FEATURE_SPEC -PathType Leaf)) {
     [Console]::Error.WriteLine("ERROR: spec.yaml not found in $($paths.FEATURE_DIR)")
     [Console]::Error.WriteLine("Run /speckit-specify first to create the feature specification.")
     exit 1
@@ -38,7 +45,7 @@ if (-not (Invoke-ValidationGate -SchemaName 'spec' -YamlPath $paths.FEATURE_SPEC
 }
 
 # Copy plan template if plan doesn't already exist
-if (Test-Path $paths.IMPL_PLAN -PathType Leaf) {
+if (Test-Path -LiteralPath $paths.IMPL_PLAN -PathType Leaf) {
     if ($Json) {
         [Console]::Error.WriteLine("Plan already exists at $($paths.IMPL_PLAN), skipping template copy")
     } else {
@@ -46,7 +53,7 @@ if (Test-Path $paths.IMPL_PLAN -PathType Leaf) {
     }
 } else {
     $template = Resolve-Template -TemplateName 'plan-template' -RepoRoot $paths.REPO_ROOT
-    if ($template -and (Test-Path $template)) {
+    if ($template -and (Test-Path -LiteralPath $template)) {
         # Read the template content and write it to the implementation plan file with UTF-8 encoding without BOM
         $content = [System.IO.File]::ReadAllText($template)
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -80,7 +87,7 @@ if ($Json) {
         SPECS_DIR = $paths.FEATURE_DIR
         BRANCH = $paths.CURRENT_BRANCH
     }
-    $result | ConvertTo-Json -Compress
+    $result | ConvertTo-AsciiJson
 } else {
     Write-Output "FEATURE_SPEC: $($paths.FEATURE_SPEC)"
     Write-Output "IMPL_PLAN: $($paths.IMPL_PLAN)"

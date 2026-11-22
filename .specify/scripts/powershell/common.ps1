@@ -147,6 +147,12 @@ function Save-FeatureJson {
     [System.IO.File]::WriteAllText($fjPath, $json, $utf8NoBom)
 }
 
+function ConvertTo-AsciiJson {
+    param([Parameter(Mandatory = $true, ValueFromPipeline = $true)]$InputObject)
+    $json = $InputObject | ConvertTo-Json -Compress
+    return [regex]::Replace($json, '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+}
+
 function Get-FeaturePathsEnv {
     # Read-only callers (e.g. check-prerequisites.ps1 -PathsOnly) pass -NoPersist
     # so pure path resolution never writes .specify/feature.json, which would
@@ -174,7 +180,7 @@ function Get-FeaturePathsEnv {
         if (-not $NoPersist) {
             Save-FeatureJson -RepoRoot $repoRoot -FeatureDirectory $env:SPECIFY_FEATURE_DIRECTORY
         }
-    } elseif (Test-Path $featureJson) {
+    } elseif (Test-Path -LiteralPath $featureJson) {
         $featureJsonRaw = Get-Content -LiteralPath $featureJson -Raw
         try {
             $featureConfig = $featureJsonRaw | ConvertFrom-Json
@@ -224,7 +230,7 @@ function Get-FeaturePathsEnv {
 
 function Test-FileExists {
     param([string]$Path, [string]$Description)
-    if (Test-Path -Path $Path -PathType Leaf) {
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
         Write-Output "  [OK] $Description"
         return $true
     } else {
@@ -241,7 +247,7 @@ function Test-DirHasFiles {
     # only contents are subdirectories (e.g. contracts/v1/openapi.yaml) as
     # non-empty like bash check_dir. Filtering out subdirectories would
     # mis-report such a directory as empty.
-    if ((Test-Path -Path $Path -PathType Container) -and (Get-ChildItem -Path $Path -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+    if ((Test-Path -LiteralPath $Path -PathType Container) -and (Get-ChildItem -LiteralPath $Path -ErrorAction SilentlyContinue | Select-Object -First 1)) {
         Write-Output "  [OK] $Description"
         return $true
     } else {
@@ -334,17 +340,17 @@ function Resolve-Template {
     # not yet converted, e.g. research/quickstart process docs)
     foreach ($ext in @('yaml', 'md')) {
         $override = Join-Path $base "overrides/$TemplateName.$ext"
-        if (Test-Path $override) { return $override }
+        if (Test-Path -LiteralPath $override) { return $override }
     }
 
     # Priority 2: Installed presets (sorted by priority from .registry)
     $presetsDir = Join-Path $RepoRoot '.specify/presets'
-    if (Test-Path $presetsDir) {
+    if (Test-Path -LiteralPath $presetsDir) {
         $registryFile = Join-Path $presetsDir '.registry'
         $sortedPresets = @()
-        if (Test-Path $registryFile) {
+        if (Test-Path -LiteralPath $registryFile) {
             try {
-                $registryData = Get-Content $registryFile -Raw | ConvertFrom-Json
+                $registryData = Get-Content -LiteralPath $registryFile -Raw | ConvertFrom-Json
                 $presets = $registryData.presets
                 if ($presets) {
                     $sortedPresets = $presets.PSObject.Properties |
@@ -361,30 +367,30 @@ function Resolve-Template {
         if ($sortedPresets.Count -gt 0) {
             foreach ($presetId in $sortedPresets) {
                 $candidate = Join-Path $presetsDir "$presetId/templates/$TemplateName.md"
-                if (Test-Path $candidate) { return $candidate }
+                if (Test-Path -LiteralPath $candidate) { return $candidate }
             }
         } else {
             # Fallback: alphabetical directory order
-            foreach ($preset in Get-ChildItem -Path $presetsDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' }) {
+            foreach ($preset in Get-ChildItem -LiteralPath $presetsDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' }) {
                 $candidate = Join-Path $preset.FullName "templates/$TemplateName.md"
-                if (Test-Path $candidate) { return $candidate }
+                if (Test-Path -LiteralPath $candidate) { return $candidate }
             }
         }
     }
 
     # Priority 3: Extension-provided templates
     $extDir = Join-Path $RepoRoot '.specify/extensions'
-    if (Test-Path $extDir) {
-        foreach ($ext in Get-ChildItem -Path $extDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' } | Sort-Object Name) {
+    if (Test-Path -LiteralPath $extDir) {
+        foreach ($ext in Get-ChildItem -LiteralPath $extDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' } | Sort-Object Name) {
             $candidate = Join-Path $ext.FullName "templates/$TemplateName.md"
-            if (Test-Path $candidate) { return $candidate }
+            if (Test-Path -LiteralPath $candidate) { return $candidate }
         }
     }
 
     # Priority 4: Core templates (.yaml preferred, .md for legacy templates)
     foreach ($ext in @('yaml', 'md')) {
         $core = Join-Path $base "$TemplateName.$ext"
-        if (Test-Path $core) { return $core }
+        if (Test-Path -LiteralPath $core) { return $core }
     }
 
     return $null
@@ -432,19 +438,19 @@ function Resolve-TemplateContent {
 
     # Priority 1: Project overrides (always "replace")
     $override = Join-Path $base "overrides/$TemplateName.md"
-    if (Test-Path $override) {
+    if (Test-Path -LiteralPath $override) {
         $layerPaths += $override
         $layerStrategies += 'replace'
     }
 
     # Priority 2: Installed presets (sorted by priority from .registry)
     $presetsDir = Join-Path $RepoRoot '.specify/presets'
-    if (Test-Path $presetsDir) {
+    if (Test-Path -LiteralPath $presetsDir) {
         $registryFile = Join-Path $presetsDir '.registry'
         $sortedPresets = @()
-        if (Test-Path $registryFile) {
+        if (Test-Path -LiteralPath $registryFile) {
             try {
-                $registryData = Get-Content $registryFile -Raw | ConvertFrom-Json
+                $registryData = Get-Content -LiteralPath $registryFile -Raw | ConvertFrom-Json
                 $presets = $registryData.presets
                 if ($presets) {
                     $sortedPresets = $presets.PSObject.Properties |
@@ -463,7 +469,7 @@ function Resolve-TemplateContent {
                 # Check if any preset has strategy fields that would be ignored
                 foreach ($pid in $sortedPresets) {
                     $mf = Join-Path $presetsDir "$pid/preset.yml"
-                    if ((Test-Path $mf) -and (Select-String -Path $mf -Pattern 'strategy:' -Quiet -ErrorAction SilentlyContinue)) {
+                    if ((Test-Path -LiteralPath $mf) -and (Select-String -LiteralPath $mf -Pattern 'strategy:' -Quiet -ErrorAction SilentlyContinue)) {
                         Write-Warning "No Python 3 found; preset composition strategies will be ignored"
                         break
                     }
@@ -475,7 +481,7 @@ function Resolve-TemplateContent {
                 $strategy = 'replace'
                 $manifestFilePath = ''
                 $manifest = Join-Path $presetsDir "$presetId/preset.yml"
-                if ((Test-Path $manifest) -and $pyCmd) {
+                if ((Test-Path -LiteralPath $manifest) -and $pyCmd) {
                     try {
                         # Use Python to parse YAML manifest for strategy and file path
                         $pyArgs = if ($pyCmd.Count -gt 1) { $pyCmd[1..($pyCmd.Count-1)] } else { @() }
@@ -504,14 +510,14 @@ except Exception:
                             $strategy = $parts[0].ToLowerInvariant()
                             if ($parts.Count -gt 1 -and $parts[1]) { $manifestFilePath = $parts[1] }
                         }
-                        if (-not $yamlWarned -and (Test-Path $pyStderrFile) -and (Get-Content $pyStderrFile -Raw -ErrorAction SilentlyContinue) -match 'yaml_missing') {
+                        if (-not $yamlWarned -and (Test-Path -LiteralPath $pyStderrFile) -and (Get-Content -LiteralPath $pyStderrFile -Raw -ErrorAction SilentlyContinue) -match 'yaml_missing') {
                             Write-Warning "PyYAML not available; composition strategies may be ignored"
                             $yamlWarned = $true
                         }
-                        Remove-Item $pyStderrFile -Force -ErrorAction SilentlyContinue
+                        Remove-Item -LiteralPath $pyStderrFile -Force -ErrorAction SilentlyContinue
                     } catch {
                         $strategy = 'replace'
-                        if ($pyStderrFile) { Remove-Item $pyStderrFile -Force -ErrorAction SilentlyContinue }
+                        if ($pyStderrFile) { Remove-Item -LiteralPath $pyStderrFile -Force -ErrorAction SilentlyContinue }
                     }
                 }
                 # Try manifest file path first, then convention path
@@ -524,11 +530,11 @@ except Exception:
                 }
                 if ($manifestFilePath) {
                     $mf = Join-Path $presetsDir "$presetId/$manifestFilePath"
-                    if (Test-Path $mf) { $candidate = $mf }
+                    if (Test-Path -LiteralPath $mf) { $candidate = $mf }
                 }
                 if (-not $candidate) {
                     $cf = Join-Path $presetsDir "$presetId/templates/$TemplateName.md"
-                    if (Test-Path $cf) { $candidate = $cf }
+                    if (Test-Path -LiteralPath $cf) { $candidate = $cf }
                 }
                 if ($candidate) {
                     $layerPaths += $candidate
@@ -537,9 +543,9 @@ except Exception:
             }
         } else {
             # Fallback: alphabetical directory order (no registry or parse failure)
-            foreach ($preset in Get-ChildItem -Path $presetsDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' }) {
+            foreach ($preset in Get-ChildItem -LiteralPath $presetsDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' }) {
                 $candidate = Join-Path $preset.FullName "templates/$TemplateName.md"
-                if (Test-Path $candidate) {
+                if (Test-Path -LiteralPath $candidate) {
                     $layerPaths += $candidate
                     $layerStrategies += 'replace'
                 }
@@ -549,10 +555,10 @@ except Exception:
 
     # Priority 3: Extension-provided templates (always "replace")
     $extDir = Join-Path $RepoRoot '.specify/extensions'
-    if (Test-Path $extDir) {
-        foreach ($ext in Get-ChildItem -Path $extDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' } | Sort-Object Name) {
+    if (Test-Path -LiteralPath $extDir) {
+        foreach ($ext in Get-ChildItem -LiteralPath $extDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' } | Sort-Object Name) {
             $candidate = Join-Path $ext.FullName "templates/$TemplateName.md"
-            if (Test-Path $candidate) {
+            if (Test-Path -LiteralPath $candidate) {
                 $layerPaths += $candidate
                 $layerStrategies += 'replace'
             }
@@ -561,7 +567,7 @@ except Exception:
 
     # Priority 4: Core templates (always "replace")
     $core = Join-Path $base "$TemplateName.md"
-    if (Test-Path $core) {
+    if (Test-Path -LiteralPath $core) {
         $layerPaths += $core
         $layerStrategies += 'replace'
     }
@@ -571,7 +577,7 @@ except Exception:
     # If the top (highest-priority) layer is replace, it wins entirely --
     # lower layers are irrelevant regardless of their strategies.
     if ($layerStrategies[0] -eq 'replace') {
-        return (Get-Content $layerPaths[0] -Raw)
+        return (Get-Content -LiteralPath $layerPaths[0] -Raw)
     }
 
     # Check if any layer uses a non-replace strategy
@@ -581,7 +587,7 @@ except Exception:
     }
 
     if (-not $hasComposition) {
-        return (Get-Content $layerPaths[0] -Raw)
+        return (Get-Content -LiteralPath $layerPaths[0] -Raw)
     }
 
     # Find the effective base: scan from highest priority (index 0) downward
@@ -595,12 +601,12 @@ except Exception:
     }
     if ($baseIdx -lt 0) { return $null }
 
-    $content = Get-Content $layerPaths[$baseIdx] -Raw
+    $content = Get-Content -LiteralPath $layerPaths[$baseIdx] -Raw
 
     for ($i = $baseIdx - 1; $i -ge 0; $i--) {
         $path = $layerPaths[$i]
         $strat = $layerStrategies[$i]
-        $layerContent = Get-Content $path -Raw
+        $layerContent = Get-Content -LiteralPath $path -Raw
 
         switch ($strat) {
             'replace' { $content = $layerContent }

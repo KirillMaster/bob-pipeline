@@ -161,6 +161,36 @@ def dangling_reference_violations(document, yaml_path):
     return violations
 
 
+def field_ref_violations(document, yaml_path):
+    tasks = document.get("tasks") if isinstance(document, dict) else None
+    if not isinstance(tasks, list) or not any(isinstance(t, dict) and t.get("field_refs") for t in tasks):
+        return []
+    data_model_path = Path(yaml_path).resolve().parent / "data-model.yaml"
+    known = set()
+    if data_model_path.exists():
+        data_model = load_yaml(data_model_path)
+        for entity in (data_model or {}).get("entities") or []:
+            if isinstance(entity, dict) and isinstance(entity.get("id"), str):
+                for field in entity.get("fields") or []:
+                    if isinstance(field, dict) and isinstance(field.get("name"), str):
+                        known.add("{0}.{1}".format(entity["id"], field["name"]))
+    violations = []
+    for ti, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            continue
+        for i, ref in enumerate(task.get("field_refs") or []):
+            if isinstance(ref, str) and ref not in known:
+                message = "Field reference {0!r} does not resolve to an '<entity id>.<field name>' in data-model.yaml".format(ref)
+                if isinstance(task.get("id"), str):
+                    message += " (referenced from {0!r})".format(task["id"])
+                violations.append({
+                    "type": "dangling_reference",
+                    "path": ["tasks", ti, "field_refs", i],
+                    "message": message,
+                })
+    return violations
+
+
 def main():
     if len(sys.argv) != 3:
         print(json.dumps([{"type": "usage", "message": "usage: validate.py <schema-path> <yaml-path>"}]), file=sys.stderr)
@@ -174,6 +204,7 @@ def main():
     violations.extend(schema_violations(schema, document))
     violations.extend(needs_clarification_violations(document))
     violations.extend(dangling_reference_violations(document, yaml_path))
+    violations.extend(field_ref_violations(document, yaml_path))
 
     if violations:
         print(json.dumps(violations, indent=2), file=sys.stderr)

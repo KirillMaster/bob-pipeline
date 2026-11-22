@@ -10,6 +10,7 @@ tasks:
     parallelizable: false
     entity_refs: []
     contract_refs: []
+    field_refs: []  # optional; "<entity id>.<field name>" for constrained data-model fields, e.g. "E-User.email"
     steps:
       - order: 1
         action: "[Single imperative verb phrase]"

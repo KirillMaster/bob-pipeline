@@ -3,7 +3,9 @@
 [CmdletBinding()]
 param(
     [switch]$Json,
-    [switch]$Help
+    [switch]$Help,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RemainingArgs
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,20 +15,25 @@ if ($Help) {
     exit 0
 }
 
+if ($RemainingArgs.Count -gt 0) {
+    [Console]::Error.WriteLine("ERROR: Unknown option '$($RemainingArgs[0])'")
+    exit 1
+}
+
 # Source common functions
 . "$PSScriptRoot/common.ps1"
 
 # Get feature paths
 $paths = Get-FeaturePathsEnv
 
-if (-not (Test-Path $paths.IMPL_PLAN -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $paths.IMPL_PLAN -PathType Leaf)) {
     [Console]::Error.WriteLine("ERROR: plan.yaml not found in $($paths.FEATURE_DIR)")
     $planCommand = '/speckit-plan'
     [Console]::Error.WriteLine("Run $planCommand first to create the implementation plan.")
     exit 1
 }
 
-if (-not (Test-Path $paths.FEATURE_SPEC -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $paths.FEATURE_SPEC -PathType Leaf)) {
     [Console]::Error.WriteLine("ERROR: spec.yaml not found in $($paths.FEATURE_DIR)")
     $specifyCommand = '/speckit-specify'
     [Console]::Error.WriteLine("Run $specifyCommand first to create the feature structure.")
@@ -45,16 +52,16 @@ if (-not (Invoke-ValidationGate -SchemaName 'plan' -YamlPath $paths.IMPL_PLAN -R
 
 # Build available docs list
 $docs = @()
-if (Test-Path $paths.RESEARCH) { $docs += 'research.md' }
-if (Test-Path $paths.DATA_MODEL) { $docs += 'data-model.md' }
+if (Test-Path -LiteralPath $paths.RESEARCH) { $docs += 'research.md' }
+if (Test-Path -LiteralPath $paths.DATA_MODEL) { $docs += 'data-model.md' }
 $dataModelYaml = Join-Path $paths.FEATURE_DIR 'data-model.yaml'
-if (Test-Path $dataModelYaml) { $docs += 'data-model.yaml' }
+if (Test-Path -LiteralPath $dataModelYaml) { $docs += 'data-model.yaml' }
 $contractsYaml = Join-Path $paths.FEATURE_DIR 'contracts.yaml'
-if (Test-Path $contractsYaml) { $docs += 'contracts.yaml' }
-if ((Test-Path $paths.CONTRACTS_DIR) -and (Get-ChildItem -Path $paths.CONTRACTS_DIR -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+if (Test-Path -LiteralPath $contractsYaml) { $docs += 'contracts.yaml' }
+if ((Test-Path -LiteralPath $paths.CONTRACTS_DIR) -and (Get-ChildItem -LiteralPath $paths.CONTRACTS_DIR -ErrorAction SilentlyContinue | Select-Object -First 1)) {
     $docs += 'contracts/'
 }
-if (Test-Path $paths.QUICKSTART) { $docs += 'quickstart.md' }
+if (Test-Path -LiteralPath $paths.QUICKSTART) { $docs += 'quickstart.md' }
 
 # Resolve tasks template through override stack
 $tasksTemplate = Resolve-Template -TemplateName 'tasks-template' -RepoRoot $paths.REPO_ROOT
@@ -71,7 +78,7 @@ if ($Json) {
         FEATURE_DIR    = $paths.FEATURE_DIR
         AVAILABLE_DOCS = $docs
         TASKS_TEMPLATE = $tasksTemplate
-    } | ConvertTo-Json -Compress
+    } | ConvertTo-AsciiJson
 } else {
     Write-Output "FEATURE_DIR: $($paths.FEATURE_DIR)"
     Write-Output "TASKS_TEMPLATE: $(if ($tasksTemplate) { $tasksTemplate } else { 'not found' })"

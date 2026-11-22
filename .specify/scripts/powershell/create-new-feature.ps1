@@ -7,7 +7,7 @@ param(
     [switch]$DryRun,
     [string]$ShortName,
     [Parameter()]
-    [long]$Number = 0,
+    [string]$Number = '',
     [switch]$Timestamp,
     [switch]$Help,
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
@@ -24,7 +24,7 @@ if ($Help) {
     Write-Host "  -DryRun             Compute feature name and paths without creating directories or files"
     Write-Host "  -AllowExistingBranch  Reuse an existing feature directory if it already exists"
     Write-Host "  -ShortName <name>   Provide a custom short name (2-4 words) for the feature"
-    Write-Host "  -Number N           Specify branch number manually (overrides auto-detection)"
+    Write-Host "  -Number N           Prefer a feature number (auto-corrected if its specs prefix exists)"
     Write-Host "  -Timestamp          Use timestamp prefix (YYYYMMDD-HHMMSS) instead of sequential numbering"
     Write-Host "  -Help               Show this help message"
     Write-Host ""
@@ -53,8 +53,8 @@ function Get-HighestNumberFromSpecs {
     param([string]$SpecsDir)
 
     [long]$highest = 0
-    if (Test-Path $SpecsDir) {
-        Get-ChildItem -Path $SpecsDir -Directory | ForEach-Object {
+    if (Test-Path -LiteralPath $SpecsDir) {
+        Get-ChildItem -LiteralPath $SpecsDir -Directory | ForEach-Object {
             # Match sequential prefixes (>=3 digits), but skip timestamp dirs.
             if ($_.Name -match '^(\d{3,})-' -and $_.Name -notmatch '^\d{8}-\d{6}-') {
                 [long]$num = 0
@@ -65,6 +65,21 @@ function Get-HighestNumberFromSpecs {
         }
     }
     return $highest
+}
+
+function Test-SpecPrefixInUse {
+    param(
+        [string]$SpecsDir,
+        [string]$FeatureNum
+    )
+
+    if (-not (Test-Path -LiteralPath $SpecsDir -PathType Container)) {
+        return $false
+    }
+
+    return $null -ne (Get-ChildItem -LiteralPath $SpecsDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "$FeatureNum-*" } |
+        Select-Object -First 1)
 }
 
 function ConvertTo-CleanBranchName {
@@ -78,7 +93,7 @@ function ConvertTo-CleanBranchName {
 # Use common.ps1 functions which prioritize .specify
 $repoRoot = Get-RepoRoot
 
-Set-Location $repoRoot
+Set-Location -LiteralPath $repoRoot
 
 $specsDir = Join-Path $repoRoot 'specs'
 if (-not $DryRun) {
@@ -142,12 +157,14 @@ if ($ShortName) {
     $branchSuffix = Get-BranchName -Description $featureDesc
 }
 
-# Warn if -Number and -Timestamp are both specified. Use ContainsKey (not
-# `-ne 0`) so an explicit `-Number 0` is also detected, matching the bash twin's
-# `[ -n "$BRANCH_NUMBER" ]` check.
-if ($Timestamp -and $PSBoundParameters.ContainsKey('Number')) {
+# Treat an explicit empty string as omitted, matching the bash twin.
+$hasNumber = $PSBoundParameters.ContainsKey('Number') -and $Number -ne ''
+
+# Warn if -Number and -Timestamp are both specified.
+if ($Timestamp -and $hasNumber) {
     Write-Warning "[specify] Warning: -Number is ignored when -Timestamp is used"
-    $Number = 0
+    $Number = ''
+    $hasNumber = $false
 }
 
 # Determine branch prefix
@@ -155,14 +172,45 @@ if ($Timestamp) {
     $featureNum = Get-Date -Format 'yyyyMMdd-HHmmss'
     $branchName = "$featureNum-$branchSuffix"
 } else {
-    # Determine branch number from existing feature directories. Auto-detect only
-    # when -Number was not supplied; an explicit value (including 0) is honored,
-    # matching the bash twin's `[ -z "$BRANCH_NUMBER" ]` check.
-    if (-not $PSBoundParameters.ContainsKey('Number')) {
-        $Number = (Get-HighestNumberFromSpecs -SpecsDir $specsDir) + 1
+    # Auto-detect from existing feature directories only when -Number was not
+    # supplied; an explicit value (including 0) is honored as a preference.
+    [long]$resolvedNumber = 0
+    if (-not $hasNumber) {
+        $highestNumber = Get-HighestNumberFromSpecs -SpecsDir $specsDir
+        if ($highestNumber -eq [long]::MaxValue) {
+            Write-Error "Error: feature number must be between 0 and $([long]::MaxValue), got '9223372036854775808'"
+            exit 1
+        }
+        $resolvedNumber = $highestNumber + 1
+    } elseif ($Number -notmatch '^[0-9]+$') {
+        Write-Error "Error: -Number must be an unsigned integer, got '$Number'"
+        exit 1
+    } elseif (-not [long]::TryParse($Number, [ref]$resolvedNumber)) {
+        Write-Error "Error: -Number must be between 0 and $([long]::MaxValue), got '$Number'"
+        exit 1
     }
 
-    $featureNum = ('{0:000}' -f $Number)
+    $featureNum = ('{0:000}' -f $resolvedNumber)
+
+    # An explicit number is a preference: if its prefix is already used by a
+    # feature directory, move to the next free number instead of colliding.
+    if ($hasNumber -and (Test-SpecPrefixInUse -SpecsDir $specsDir -FeatureNum $featureNum)) {
+        $existingDir = Join-Path $specsDir "$featureNum-$branchSuffix"
+        if (-not ($AllowExistingBranch -and (Test-Path -LiteralPath $existingDir -PathType Container))) {
+            $requestedNum = $featureNum
+            $resolvedNumber = Get-HighestNumberFromSpecs -SpecsDir $specsDir
+            do {
+                if ($resolvedNumber -eq [long]::MaxValue) {
+                    Write-Error "Error: feature number must be between 0 and $([long]::MaxValue), got '9223372036854775808'"
+                    exit 1
+                }
+                $resolvedNumber++
+                $featureNum = ('{0:000}' -f $resolvedNumber)
+            } while (Test-SpecPrefixInUse -SpecsDir $specsDir -FeatureNum $featureNum)
+            [Console]::Error.WriteLine("[specify] Warning: -Number $requestedNum conflicts with an existing spec directory; using $featureNum instead")
+        }
+    }
+
     $branchName = "$featureNum-$branchSuffix"
 }
 
@@ -203,9 +251,9 @@ if (-not $DryRun) {
 
     New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
 
-    if (-not (Test-Path -PathType Leaf $specFile)) {
+    if (-not (Test-Path -LiteralPath $specFile -PathType Leaf)) {
         $template = Resolve-Template -TemplateName 'spec-template' -RepoRoot $repoRoot
-        if ($template -and (Test-Path $template)) {
+        if ($template -and (Test-Path -LiteralPath $template)) {
             # Read the template content and write it to the spec file with UTF-8 encoding without BOM
             $content = [System.IO.File]::ReadAllText($template)
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -236,7 +284,7 @@ if ($Json) {
     if ($DryRun) {
         $obj | Add-Member -NotePropertyName 'DRY_RUN' -NotePropertyValue $true
     }
-    $obj | ConvertTo-Json -Compress
+    $obj | ConvertTo-AsciiJson
 } else {
     Write-Output "BRANCH_NAME: $branchName"
     Write-Output "SPEC_FILE: $specFile"

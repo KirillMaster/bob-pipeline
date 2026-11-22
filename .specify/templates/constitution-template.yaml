@@ -8,3 +8,4 @@ principles:
     description: "[Declarative, testable rule and its rationale]"
     severity: "NON-NEGOTIABLE"
     gate_condition: "[Machine-checkable condition a plan/task must satisfy to pass this principle's gate]"
+    verified_by: ["[Test name/filter or gate id proving this principle, e.g. Architecture.NoCycles — optional]"]

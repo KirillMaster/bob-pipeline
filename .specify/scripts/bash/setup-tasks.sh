@@ -9,6 +9,7 @@ for arg in "$@"; do
             echo "Usage: setup-tasks.sh [--json] [--help]"
             exit 0
             ;;
+        *) echo "ERROR: Unknown option '$arg'" >&2; exit 1 ;;
     esac
 done
 
